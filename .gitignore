@@ -1,0 +1,8 @@
+server/config.local.php
+server/storage/*.sqlite
+apps/*/build/
+apps/*/.dart_tool/
+apps/*/android/
+apps/*/.flutter-plugins*
+apps/*/pubspec.lock
+.DS_Store

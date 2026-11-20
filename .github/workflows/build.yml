@@ -1,0 +1,55 @@
+name: Build Android apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [passenger, driver]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Create the Android project around our Dart code
+        working-directory: apps/${{ matrix.app }}
+        run: flutter create --platforms android --org com.zarrasha --project-name ${{ matrix.app == 'passenger' && 'zardrive' || 'zardrive_driver' }} .
+      - name: Add ZarDrive name, icon and permissions
+        run: python3 apps/tools/brand.py ${{ matrix.app }}
+      - name: Build APK
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings || true
+          flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZarDrive-${{ matrix.app }}-apk
+          path: apps/${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+  server-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite, mbstring
+      - name: Server tests
+        working-directory: server
+        run: |
+          php tests/flow.php | tail -1
+          php tests/places.php | tail -1
+          php tests/apps.php | tail -1

@@ -1,0 +1,17 @@
+name: zardrive_driver
+description: ZarDrive Driver app for Android.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_inappwebview: ^6.1.5
+  permission_handler: ^11.3.1
+  url_launcher: ^6.3.0
+
+flutter:
+  uses-material-design: true
