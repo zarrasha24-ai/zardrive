@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,6 +41,16 @@ jobs:
           name: ZarDrive-${{ matrix.app }}-apk
           path: apps/${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
+      - name: Name the APK for the release
+        run: cp apps/${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk ${{ matrix.app == 'passenger' && 'ZarDrive' || 'ZarDrive-Driver' }}.apk
+      - name: Put the APK on the "test" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test
+          name: ZarDrive test apps
+          prerelease: true
+          body: Latest test build of the ZarDrive passenger app (ZarDrive.apk) and driver app (ZarDrive-Driver.apk). Rebuilt on every push to main.
+          files: ${{ matrix.app == 'passenger' && 'ZarDrive' || 'ZarDrive-Driver' }}.apk
 
   server-tests:
     runs-on: ubuntu-latest
