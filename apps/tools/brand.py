@@ -23,4 +23,17 @@ for d in ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']:
     src = root / 'branding' / app / f'ic_launcher-{d}.png'
     if src.exists():
         shutil.copy(src, res / f'mipmap-{d}' / 'ic_launcher.png')
+# flutter create adds a sample test for a counter app we do not have
+sample = proj / 'test' / 'widget_test.dart'
+if sample.exists():
+    sample.unlink()
+# Android's release lint step crashes inside the build tools on some plugin sources; it checks nothing of ours
+for name in ['build.gradle.kts', 'build.gradle']:
+    g = proj / 'android' / name
+    if g.exists():
+        t = g.read_text()
+        if 'lintVital' not in t:
+            t += '\nsubprojects {\n    tasks.matching { it.name.contains("lintVital") }.configureEach { enabled = false }\n}\n'
+            g.write_text(t)
+        break
 print('branded', app, '->', label)
