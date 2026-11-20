@@ -1,8 +1,9 @@
 // ZarDrive: the Android app opens the ZarDrive passenger screens, with location and phone links handled by Android.
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 const String startUrl = 'https://zardrive.zarrasha.com/app';
 const String ourHost = 'zardrive.zarrasha.com';
@@ -34,17 +35,11 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> {
-  InAppWebViewController? web;
+  late final WebViewController web;
   bool loading = true;
   bool offline = false;
 
-  @override
-  void initState() {
-    super.initState();
-    Permission.locationWhenInUse.request();
-  }
-
-  bool _isOurs(Uri u) => u.host == ourHost || u.host.endsWith('openstreetmap.org') || u.host == 'unpkg.com' || u.host.endsWith('googleapis.com') || u.host.endsWith('gstatic.com');
+  bool _isOurs(Uri u) => u.host == ourHost || u.host.endsWith('openstreetmap.org') || u.host == 'unpkg.com' || u.host.endsWith('googleapis.com') || u.host.endsWith('gstatic.com') || u.host.endsWith('google.com');
 
   Future<void> _openOutside(Uri u) async {
     if (!await launchUrl(u, mode: LaunchMode.externalApplication)) {
@@ -53,51 +48,52 @@ class _ShellState extends State<Shell> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    web = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.white)
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageFinished: (_) {
+          if (mounted) setState(() { loading = false; });
+        },
+        onWebResourceError: (e) {
+          if ((e.isForMainFrame ?? false) && mounted) setState(() { offline = true; loading = false; });
+        },
+        onNavigationRequest: (r) {
+          final u = Uri.tryParse(r.url);
+          if (u == null) return NavigationDecision.prevent;
+          if ((u.scheme == 'https' || u.scheme == 'http') && _isOurs(u)) return NavigationDecision.navigate;
+          _openOutside(u);
+          return NavigationDecision.prevent;
+        },
+      ));
+    final p = web.platform;
+    if (p is AndroidWebViewController) {
+      p.setMediaPlaybackRequiresUserGesture(false);
+      p.setGeolocationPermissionsPromptCallbacks(
+        onShowPrompt: (request) async {
+          final s = await Permission.locationWhenInUse.request();
+          return GeolocationPermissionsResponse(allow: s.isGranted, retain: s.isGranted);
+        },
+      );
+    }
+    Permission.locationWhenInUse.request().whenComplete(() => web.loadRequest(Uri.parse(startUrl)));
+  }
+
+  @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        final c = web;
-        if (c != null && await c.canGoBack()) {
-          c.goBack();
-        }
+        if (await web.canGoBack()) web.goBack();
       },
       child: Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
           child: Stack(children: [
-            InAppWebView(
-              initialUrlRequest: URLRequest(url: WebUri(startUrl)),
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                domStorageEnabled: true,
-                geolocationEnabled: true,
-                useShouldOverrideUrlLoading: true,
-                supportMultipleWindows: true,
-                javaScriptCanOpenWindowsAutomatically: true,
-                mediaPlaybackRequiresUserGesture: false,
-              ),
-              onWebViewCreated: (c) => web = c,
-              onLoadStop: (c, url) => setState(() { loading = false; offline = false; }),
-              onReceivedError: (c, req, err) {
-                if (req.isForMainFrame ?? false) setState(() { offline = true; loading = false; });
-              },
-              onGeolocationPermissionsShowPrompt: (c, origin) async =>
-                  GeolocationPermissionShowPromptResponse(origin: origin, allow: true, retain: true),
-              shouldOverrideUrlLoading: (c, action) async {
-                final u = action.request.url;
-                if (u == null) return NavigationActionPolicy.ALLOW;
-                if ((u.scheme == 'https' || u.scheme == 'http') && _isOurs(u)) return NavigationActionPolicy.ALLOW;
-                await _openOutside(u);
-                return NavigationActionPolicy.CANCEL;
-              },
-              onCreateWindow: (c, req) async {
-                final u = req.request.url;
-                if (u != null) await _openOutside(u);
-                return false;
-              },
-            ),
+            WebViewWidget(controller: web),
             if (loading) const Center(child: CircularProgressIndicator()),
             if (offline)
               Container(
@@ -110,7 +106,7 @@ class _ShellState extends State<Shell> {
                   const SizedBox(height: 20),
                   FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC8102E), minimumSize: const Size.fromHeight(52)),
-                    onPressed: () { setState(() { offline = false; loading = true; }); web?.reload(); },
+                    onPressed: () { setState(() { offline = false; loading = true; }); web.reload(); },
                     child: const Text('Try again'),
                   ),
                 ]),
