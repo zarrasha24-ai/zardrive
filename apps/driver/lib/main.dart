@@ -5,8 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
-const String startUrl = 'https://zardrive.zarrasha.com/driver';
-const String ourHost = 'zardrive.zarrasha.com';
+// The same app shell builds ZarDrive and the Zarrasha rides beta apps: values come from --dart-define at build time.
+const String startUrl = String.fromEnvironment('START_URL', defaultValue: 'https://zardrive.zarrasha.com/driver');
+const String ourHost = String.fromEnvironment('OUR_HOST', defaultValue: 'zardrive.zarrasha.com');
+const String appTitle = String.fromEnvironment('APP_TITLE', defaultValue: 'ZarDrive Driver');
+const int brandColor = int.fromEnvironment('BRAND_COLOR', defaultValue: 0xFF111418);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,9 +22,9 @@ class ZarDriveApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ZarDrive Driver',
+      title: appTitle,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: const Color(0xFF111418), useMaterial3: true),
+      theme: ThemeData(colorSchemeSeed: const Color(brandColor), useMaterial3: true),
       home: const Shell(),
     );
   }
@@ -105,7 +108,7 @@ class _ShellState extends State<Shell> {
                   const Text('Check your mobile data or Wi-Fi, then try again.', textAlign: TextAlign.center),
                   const SizedBox(height: 20),
                   FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC8102E), minimumSize: const Size.fromHeight(52)),
+                    style: FilledButton.styleFrom(backgroundColor: const Color(brandColor), minimumSize: const Size.fromHeight(52)),
                     onPressed: () { setState(() { offline = false; loading = true; }); web.reload(); },
                     child: const Text('Try again'),
                   ),

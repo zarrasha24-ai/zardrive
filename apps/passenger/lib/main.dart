@@ -1,12 +1,16 @@
 // ZarDrive: the Android app opens the ZarDrive passenger screens, with location and phone links handled by Android.
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
-const String startUrl = 'https://zardrive.zarrasha.com/app';
-const String ourHost = 'zardrive.zarrasha.com';
+// The same app shell builds ZarDrive and the Zarrasha rides beta apps: values come from --dart-define at build time.
+const String startUrl = String.fromEnvironment('START_URL', defaultValue: 'https://zardrive.zarrasha.com/app');
+const String ourHost = String.fromEnvironment('OUR_HOST', defaultValue: 'zardrive.zarrasha.com');
+const String appTitle = String.fromEnvironment('APP_TITLE', defaultValue: 'ZarDrive');
+const int brandColor = int.fromEnvironment('BRAND_COLOR', defaultValue: 0xFFC8102E);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,9 +23,9 @@ class ZarDriveApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ZarDrive',
+      title: appTitle,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: const Color(0xFFC8102E), useMaterial3: true),
+      theme: ThemeData(colorSchemeSeed: const Color(brandColor), useMaterial3: true),
       home: const Shell(),
     );
   }
@@ -71,6 +75,11 @@ class _ShellState extends State<Shell> {
     final p = web.platform;
     if (p is AndroidWebViewController) {
       p.setMediaPlaybackRequiresUserGesture(false);
+      // <input type="file"> in the page (profile photo): pick from the gallery
+      p.setOnShowFileSelector((params) async {
+        final x = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 85);
+        return x == null ? <String>[] : <String>[Uri.file(x.path).toString()];
+      });
       p.setGeolocationPermissionsPromptCallbacks(
         onShowPrompt: (request) async {
           final s = await Permission.locationWhenInUse.request();
@@ -105,7 +114,7 @@ class _ShellState extends State<Shell> {
                   const Text('Check your mobile data or Wi-Fi, then try again.', textAlign: TextAlign.center),
                   const SizedBox(height: 20),
                   FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC8102E), minimumSize: const Size.fromHeight(52)),
+                    style: FilledButton.styleFrom(backgroundColor: const Color(brandColor), minimumSize: const Size.fromHeight(52)),
                     onPressed: () { setState(() { offline = false; loading = true; }); web.reload(); },
                     child: const Text('Try again'),
                   ),

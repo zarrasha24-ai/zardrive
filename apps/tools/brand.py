@@ -3,7 +3,8 @@ import re, shutil, sys, pathlib
 app = sys.argv[1]
 root = pathlib.Path(__file__).resolve().parent.parent
 proj = root / app
-label = 'ZarDrive' if app == 'passenger' else 'ZarDrive Driver'
+label = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else ('ZarDrive' if app == 'passenger' else 'ZarDrive Driver')
+app_id = sys.argv[3] if len(sys.argv) > 3 else ''
 man = proj / 'android/app/src/main/AndroidManifest.xml'
 s = man.read_text()
 perms = ''.join(f'    <uses-permission android:name="android.permission.{p}"/>\n' for p in ['INTERNET', 'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'])
@@ -36,4 +37,14 @@ for name in ['build.gradle.kts', 'build.gradle']:
             t += '\nsubprojects {\n    tasks.matching { it.name.contains("lintVital") }.configureEach { enabled = false }\n}\n'
             g.write_text(t)
         break
-print('branded', app, '->', label)
+# a different application id lets the Zarrasha rides apps sit beside the ZarDrive apps on one phone
+if app_id:
+    for name in ['build.gradle.kts', 'build.gradle']:
+        g = proj / 'android' / 'app' / name
+        if g.exists():
+            t = g.read_text()
+            t = re.sub(r'applicationId\s*=\s*"[^"]+"', f'applicationId = "{app_id}"', t)
+            t = re.sub(r'applicationId\s+"[^"]+"', f'applicationId "{app_id}"', t)
+            g.write_text(t)
+            break
+print('branded', app, '->', label, app_id)

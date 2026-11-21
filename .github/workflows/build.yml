@@ -14,7 +14,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [passenger, driver]
+        include:
+          - { app: passenger, apk: ZarDrive, tag: test, label: ZarDrive, appid: '', defines: '' }
+          - { app: driver, apk: ZarDrive-Driver, tag: test, label: ZarDrive Driver, appid: '', defines: '' }
+          - { app: passenger, apk: Zarrasha-Rides, tag: rides-beta, label: Zarrasha Rides, appid: com.zarrasha.rides,
+              defines: '--dart-define=START_URL=https://admin.zarrasha.com/beta/rides/ --dart-define=OUR_HOST=admin.zarrasha.com --dart-define="APP_TITLE=Zarrasha Rides" --dart-define=BRAND_COLOR=4291559963' }
+          - { app: driver, apk: Zarrasha-Rides-Rider, tag: rides-beta, label: Zarrasha Rides Rider, appid: com.zarrasha.rides.rider,
+              defines: '--dart-define=START_URL=https://admin.zarrasha.com/beta/rides-driver/ --dart-define=OUR_HOST=admin.zarrasha.com --dart-define="APP_TITLE=Zarrasha Rides Rider" --dart-define=BRAND_COLOR=4291559963' }
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -28,29 +34,29 @@ jobs:
       - name: Create the Android project around our Dart code
         working-directory: apps/${{ matrix.app }}
         run: flutter create --platforms android --org com.zarrasha --project-name ${{ matrix.app == 'passenger' && 'zardrive' || 'zardrive_driver' }} .
-      - name: Add ZarDrive name, icon and permissions
-        run: python3 apps/tools/brand.py ${{ matrix.app }}
+      - name: Add the app name, icon, id and permissions
+        run: python3 apps/tools/brand.py ${{ matrix.app }} "${{ matrix.label }}" "${{ matrix.appid }}"
       - name: Build APK
         working-directory: apps/${{ matrix.app }}
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos --no-fatal-warnings || true
-          flutter build apk --release
+          flutter build apk --release ${{ matrix.defines }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ZarDrive-${{ matrix.app }}-apk
+          name: ${{ matrix.apk }}-apk
           path: apps/${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
       - name: Name the APK for the release
-        run: cp apps/${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk ${{ matrix.app == 'passenger' && 'ZarDrive' || 'ZarDrive-Driver' }}.apk
-      - name: Put the APK on the "test" release
+        run: cp apps/${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk ${{ matrix.apk }}.apk
+      - name: Put the APK on its release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: test
-          name: ZarDrive test apps
+          tag_name: ${{ matrix.tag }}
+          name: ${{ matrix.tag == 'test' && 'ZarDrive test apps' || 'Zarrasha Rides beta apps' }}
           prerelease: true
-          body: Latest test build of the ZarDrive passenger app (ZarDrive.apk) and driver app (ZarDrive-Driver.apk). Rebuilt on every push to main.
-          files: ${{ matrix.app == 'passenger' && 'ZarDrive' || 'ZarDrive-Driver' }}.apk
+          body: "${{ matrix.tag == 'test' && 'Latest test build of the ZarDrive passenger app (ZarDrive.apk) and driver app (ZarDrive-Driver.apk). Rebuilt on every push to main.' || 'Zarrasha Rides beta: customer app (Zarrasha-Rides.apk) opens admin.zarrasha.com/beta/rides, rider app (Zarrasha-Rides-Rider.apk) opens admin.zarrasha.com/beta/rides-driver. Rebuilt on every push to main.' }}"
+          files: ${{ matrix.apk }}.apk
 
   server-tests:
     runs-on: ubuntu-latest
