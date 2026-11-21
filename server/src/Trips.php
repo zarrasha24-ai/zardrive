@@ -49,7 +49,7 @@ final class Trips
         $id = Db::insert('trips', [
             'passenger_id' => $passengerId, 'service' => $svc, 'vehicle' => $veh, 'from_text' => mb_substr($from, 0, 180), 'to_text' => mb_substr($to, 0, 180),
             'from_lat' => $in['from_lat'] ?? null, 'from_lng' => $in['from_lng'] ?? null, 'to_lat' => $in['to_lat'] ?? null, 'to_lng' => $in['to_lng'] ?? null,
-            'km' => r2($km), 'offer' => $offer, 'agent_id' => $agentId, 'created_at' => now(),
+            'km' => r2($km), 'offer' => $offer, 'agent_id' => $agentId, 'created_at' => now(), 'auto_accept' => empty($in['auto_accept']) ? 0 : 1,
             'note' => trim((string) ($in['note'] ?? '')) !== '' ? mb_substr(trim((string) $in['note']), 0, 180) : null,
         ]);
         return self::get($id) + ['guide' => $g, 'route' => $route];
@@ -147,9 +147,13 @@ final class Trips
               AND NOT EXISTS (SELECT 1 FROM offers o WHERE o.trip_id = t.id AND o.driver_id = ?)
             ORDER BY t.id DESC LIMIT 20", [$me['vehicle'], date('Y-m-d H:i:s', time() - 600), $driverId]);
         foreach ($rows as &$r) {
-            $r['passenger_rating'] = self::passengerRating((int) $r['passenger_id']);
+            $pid = (int) $r['passenger_id'];
+            $r['passenger_rating'] = self::passengerRating($pid);
             unset($r['passenger_id']);
             $r['pickup_km'] = ($me['lat'] !== null && $r['from_lat'] !== null) ? round(Maps::straightKm((float) $me['lat'], (float) $me['lng'], (float) $r['from_lat'], (float) $r['from_lng']) * 1.3, 1) : null;
+            $r['pickup_min'] = $r['pickup_km'] !== null ? max(1, (int) ceil($r['pickup_km'] / 22 * 60)) : null;
+            $r['fair'] = (float) $r['offer'] >= self::guide($r['service'], $r['vehicle'], (float) $r['km'])['suggested'];
+            $r['passenger_trips'] = (int) Db::val("SELECT COUNT(*) FROM trips WHERE passenger_id = ? AND status = 'completed'", [$pid]);
         }
         return $rows;
     }
@@ -166,7 +170,14 @@ final class Trips
             if ($price < (float) $t['offer']) throw new ApiError('You can accept Rs ' . money((float) $t['offer']) . ' or offer more', 422);
             if ($price > 3 * (float) $t['offer']) throw new ApiError('Counter offer is too high', 422);
             if (Db::val("SELECT 1 FROM offers WHERE trip_id = ? AND driver_id = ? AND status = 'open'", [$tripId, $driverId])) throw new ApiError('You already answered this request', 409);
-            return Db::insert('offers', ['trip_id' => $tripId, 'driver_id' => $driverId, 'price' => $price, 'created_at' => now()]);
+            $oid = Db::insert('offers', ['trip_id' => $tripId, 'driver_id' => $driverId, 'price' => $price, 'created_at' => now()]);
+            // auto-accept: the passenger said yes in advance to any driver who takes their own price
+            if ((int) ($t['auto_accept'] ?? 0) === 1 && $price <= (float) $t['offer']
+                && !Db::val("SELECT 1 FROM trips WHERE driver_id = ? AND status IN ('accepted','arrived','started')", [$driverId])) {
+                Db::run("UPDATE trips SET status = 'accepted', driver_id = ?, fare = ?, accepted_at = ? WHERE id = ? AND status = 'searching'", [$driverId, $price, now(), $tripId]);
+                Db::run("UPDATE offers SET status = CASE WHEN id = ? THEN 'accepted' ELSE 'declined' END WHERE trip_id = ? AND status = 'open'", [$oid, $tripId]);
+            }
+            return $oid;
         });
     }
 

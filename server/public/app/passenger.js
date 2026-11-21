@@ -7,17 +7,20 @@ const $sheet = document.getElementById('sheet');
 const esc = ZD.esc;
 
 const SERVICES = [
-  { k: 'car', l: 'Car', svc: 'ride', veh: 'economy', ic: () => ZD.icon.car('#E3E6E9') },
-  { k: 'moto', l: 'Moto', svc: 'ride', veh: 'bike', ic: () => ZD.icon.bike('#C8102E') },
-  { k: 'ac', l: 'Car A/C', svc: 'ride', veh: 'comfort', ic: () => ZD.icon.car('#DCE8F5') },
-  { k: 'rick', l: 'Rickshaw', svc: 'ride', veh: 'rickshaw', ic: () => ZD.icon.rick('#F2D16B') },
+  { k: 'mini', l: 'Mini', svc: 'ride', veh: 'economy', ic: () => ZD.vehIcon('economy') },
+  { k: 'moto', l: 'Moto', svc: 'ride', veh: 'bike', ic: () => ZD.vehIcon('bike') },
+  { k: 'ac', l: 'Ride A/C', svc: 'ride', veh: 'comfort', ic: () => ZD.vehIcon('comfort') },
+  { k: 'rick', l: 'Rickshaw', svc: 'ride', veh: 'rickshaw', ic: () => ZD.vehIcon('rickshaw') },
+  { k: 'city', l: 'City to city', svc: 'intercity', veh: 'economy', ic: () => ZD.icon.city() },
+  { k: 'courier', l: 'Couriers', svc: 'courier', veh: 'bike', ic: () => ZD.icon.scooter() },
   { k: 'food', l: 'Food', svc: 'food', veh: 'bike', ic: () => ZD.icon.bowl('#E9C46A') },
-  { k: 'courier', l: 'Courier', svc: 'courier', veh: 'bike', ic: () => ZD.icon.box('#E8D8C3') },
-  { k: 'city', l: 'City to city', svc: 'intercity', veh: 'economy', ic: () => ZD.icon.car('#E3E6E9') },
-  { k: 'freight', l: 'Freight', svc: 'freight', veh: 'loader', ic: () => ZD.icon.box('#9AC29C') },
+  { k: 'freight', l: 'Freight', svc: 'freight', veh: 'loader', ic: () => ZD.vehIcon('loader') },
 ];
-const VEH_NOTE = { bike: 'No traffic, lower price', rickshaw: 'Short trips, cheap', economy: 'Lower fares, no AC', comfort: 'Cars with AC', loader: 'Loaders and pickups' };
-const SEATS = { bike: '1 seat', rickshaw: '3 seats', economy: '4 seats', comfort: '4 seats', loader: 'Goods' };
+const VEH_NOTE = { bike: 'No traffic, lower prices', rickshaw: 'Short trips, cheap', economy: 'Lower fares, no AC', comfort: 'Cars with AC', loader: 'Loaders and pickups' };
+const SEATS = { bike: 1, rickshaw: 3, economy: 4, comfort: 4, loader: 0 };
+const VLABEL = { economy: 'Mini', bike: 'Moto', comfort: 'Ride A/C', rickshaw: 'Rickshaw', loader: 'Freight' };
+const vname = (v) => VLABEL[v] || (P.cfg && P.cfg.vehicles[v]) || v;
+const seatTxt = (v) => SEATS[v] ? `<svg class="seat" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4" fill="currentColor"/><path d="M4 21c0-4.5 3.6-7 8-7s8 2.5 8 7z" fill="currentColor"/></svg> ${SEATS[v]}` : 'Goods';
 
 const P = { cfg: null, me: null, s: SERVICES[0], from: null, to: null, route: null, guides: {}, offer: {}, veh: null, note: '', trip: null, field: 'to', tags: [] };
 
@@ -27,14 +30,16 @@ function screen(html, on, mode, keepTimers) {
   if (!keepTimers) ZD.clearTimers();
   document.body.classList.toggle('full', mode === 'full');
   document.body.classList.toggle('tall', mode === 'tall');
-  document.querySelectorAll('.map-top').forEach(n => n.remove());
+  document.body.classList.toggle('home', mode === 'home');
+  document.body.classList.toggle('farem', mode === 'fare');
+  document.querySelectorAll('.map-ov').forEach(n => n.remove());
   $sheet.innerHTML = html;
   $sheet.scrollTop = 0;
   handlers = on || {};
   ZD.refreshMap();
 }
 $sheet.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && handlers[b.dataset.act]) handlers[b.dataset.act](b, e); });
-function overlay(html) { const d = document.createElement('div'); d.className = 'map-top'; d.innerHTML = html; document.body.appendChild(d);
+function overlay(html, cls) { const d = document.createElement('div'); d.className = 'map-ov ' + (cls || 'map-top'); d.innerHTML = html; document.body.appendChild(d);
   d.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && handlers[b.dataset.act]) handlers[b.dataset.act](b, e); }); return d; }
 function busy(btn, text) { if (btn) { btn.disabled = true; btn.dataset.t = btn.textContent; btn.textContent = text || 'Please wait…'; } }
 function unbusy(btn) { if (btn) { btn.disabled = false; btn.textContent = btn.dataset.t || btn.textContent; } }
@@ -108,17 +113,17 @@ async function home() {
     menu() { menu(); },
     pickup() { whereTo('from'); },
     locate() { locateMe(true); },
-  });
-  overlay(`<button class="icon-btn" data-act="menu" aria-label="Menu">${ZD.icon.menu}</button>
-    <button class="pin-card grow" data-act="pickup" style="border:0;text-align:left"><div class="muted small">Pick-up</div><div class="ell" style="font-weight:600" id="pickName">${esc(P.from ? P.from.name : 'Finding your location…')}</div></button>
-    <button class="icon-btn" data-act="locate" aria-label="My location">${ZD.icon.locate}</button>`);
+  }, 'home');
+  overlay(`<button class="icon-btn big" data-act="menu" aria-label="Menu">${ZD.icon.menu}</button>`);
+  overlay(`<button class="from-card" data-act="pickup"><span class="grow"><span class="muted small" style="display:block">Where from</span><span class="ell" style="display:block;font-weight:600;font-size:16px" id="pickName">${esc(P.from ? P.from.name : 'Finding your location…')}</span></span>${I.chev}</button>`, 'from-bubble');
+  overlay(`<button class="icon-btn big" data-act="locate" aria-label="My location">${ZD.icon.locate}</button>`, 'locate-fab');
   ZD.clearMap();
-  if (P.from) { ZD.pin(P.from.lat, P.from.lng, 'from'); ZD.center(P.from.lat, P.from.lng, 15); } else locateMe(false);
+  if (P.from) { ZD.pin(P.from.lat, P.from.lng, 'pickup'); ZD.center(P.from.lat, P.from.lng, 16); } else locateMe(false);
   try {
     const t = (await api('GET', '/my/trips')).trips || [];
     const seen = new Set(); P.recent = t.filter(x => x.to_lat && !seen.has(x.to_text) && seen.add(x.to_text)).slice(0, 4);
     const box = document.getElementById('recent');
-    if (box) box.innerHTML = P.recent.map((r, i) => `<button class="li" data-act="recent" data-i="${i}"><span class="ic">${ZD.icon.pin}</span><span class="grow"><span class="t ell" style="display:block">${esc(r.to_text)}</span><span class="s">${esc(ZD.when(r.created_at))}</span></span></button>`).join('')
+    if (box) box.innerHTML = P.recent.map((r, i) => `<button class="li plain" data-act="recent" data-i="${i}"><span class="ic">${ZD.icon.pinO}</span><span class="t grow ell">${esc(r.to_text)}</span></button>`).join('')
       || `<div class="muted" style="padding:6px 2px">Your recent places will show here.</div>`;
   } catch (e) { if (e.status === 401) fail(e); }
 }
@@ -129,7 +134,7 @@ async function locateMe(force) {
   try { const r = (await api('GET', `/places/reverse?lat=${pos.lat}&lng=${pos.lng}`)).place; if (r) name = r.name; } catch (e) { /* keep default */ }
   P.from = { name, lat: pos.lat, lng: pos.lng };
   setPickName(name);
-  ZD.clearMap(); ZD.pin(pos.lat, pos.lng, 'from'); ZD.center(pos.lat, pos.lng, 15);
+  ZD.clearMap(); ZD.pin(pos.lat, pos.lng, 'pickup'); ZD.center(pos.lat, pos.lng, 16);
 }
 function setPickName(n) { const el = document.getElementById('pickName'); if (el) el.textContent = n; }
 
@@ -179,11 +184,13 @@ function choose(place) {
 }
 
 // ---------- choose vehicle and fare
-function vehiclesFor(svc) { const s = (P.cfg && P.cfg.serves && P.cfg.serves[svc]) || ({ ride: ['bike', 'rickshaw', 'economy', 'comfort'], food: ['bike'], courier: ['bike', 'rickshaw'], intercity: ['economy', 'comfort'], freight: ['loader'] })[svc]; return s; }
+const VORDER = ['economy', 'bike', 'comfort', 'rickshaw', 'loader'];
+function vehiclesFor(svc) { return vehiclesFor0(svc).slice().sort((x, y) => VORDER.indexOf(x) - VORDER.indexOf(y)); }
+function vehiclesFor0(svc) { const s = (P.cfg && P.cfg.serves && P.cfg.serves[svc]) || ({ ride: ['bike', 'rickshaw', 'economy', 'comfort'], food: ['bike'], courier: ['bike', 'rickshaw'], intercity: ['economy', 'comfort'], freight: ['loader'] })[svc]; return s; }
 async function fare() {
   const svc = P.s.svc; const vehs = vehiclesFor(svc);
   if (!P.veh || !vehs.includes(P.veh)) P.veh = vehs.includes(P.s.veh) ? P.s.veh : vehs[0];
-  screen(`<div class="pulse"><i></i></div><div class="muted" style="text-align:center">Working out the route…</div>`, {}, 'tall');
+  screen(`<div class="pulse"><i></i></div><div class="muted" style="text-align:center">Working out the route…</div>`, {}, 'fare');
   try {
     P.route = await api('POST', '/route', { from_lat: P.from.lat, from_lng: P.from.lng, to_lat: P.to.lat, to_lng: P.to.lng, vehicle: P.veh });
     await Promise.all(vehs.map(async v => { P.guides[v] = await api('POST', '/fare-guide', { service: svc, vehicle: v, km: P.route.km }); if (!P.offer[v + svc]) P.offer[v + svc] = P.guides[v].suggested; }));
@@ -195,38 +202,51 @@ function drawRoute() {
   ZD.clearMap();
   const pts = ZD.decode(P.route.geometry || '');
   const a = [P.from.lat, P.from.lng], b = [P.to.lat, P.to.lng];
-  ZD.line(pts.length > 1 ? pts : [a, b]); ZD.pin(a[0], a[1], 'from'); ZD.pin(b[0], b[1], 'to'); ZD.fit([a, b].concat(pts));
+  ZD.line(pts.length > 1 ? pts : [a, b]); ZD.pin(a[0], a[1], 'pickup'); ZD.pin(b[0], b[1], 'flag'); ZD.fit([a, b].concat(pts));
 }
 function renderFare() {
   const svc = P.s.svc; const vehs = vehiclesFor(svc);
-  const extra = svc === 'food'
+  const showNote = svc === 'food' || svc === 'courier' || P.showNote || P.note;
+  const extra = !showNote ? '' : svc === 'food'
     ? `<label class="field"><span>What to pick up</span><textarea id="note" class="input" maxlength="180" placeholder="e.g. 1 chicken karahi, 4 naan. Extra raita, no onions">${esc(P.note)}</textarea></label>
        <div class="note">The rider pays the restaurant. You pay the rider the food bill at your door, plus the delivery charge. Ask for the restaurant receipt.</div>`
     : svc === 'courier' ? `<label class="field"><span>What are you sending?</span><input id="note" class="input" maxlength="180" placeholder="e.g. documents, 2 kg box" value="${esc(P.note)}"></label>`
-    : `<label class="field"><span>Note for the driver (optional)</span><input id="note" class="input" maxlength="180" placeholder="e.g. gate 2, call on arrival" value="${esc(P.note)}"></label>`;
+    : `<label class="field"><span>Comment for the driver</span><input id="note" class="input" maxlength="180" placeholder="e.g. gate 2, call on arrival" value="${esc(P.note)}"></label>`;
+  const val = () => P.offer[P.veh + svc];
   const list = vehs.map(v => {
-    const g = P.guides[v]; const on = v === P.veh; const val = P.offer[v + svc];
-    const hint = val < g.suggested ? 'Below the suggested fare: fewer drivers may answer' : val > g.suggested ? 'Above the suggested fare: faster pick-up' : 'Suggested fare';
-    return `<div class="veh-wrap ${on ? 'on' : ''}"><button class="veh" data-act="veh" data-v="${v}" aria-pressed="${on}">${ZD.vehIcon(v)}<span class="grow"><b style="display:block;font-size:16px">${esc(P.cfg ? P.cfg.vehicles[v] : v)}</b><span class="s" style="display:block">${SEATS[v]}${svc === 'food' ? ' · food rates' : ''}</span><span class="s" style="display:block">${VEH_NOTE[v]}</span></span>${on ? '' : `<b>~${ZD.rs(g.suggested)}</b>`}</button>
-      ${on ? `<div class="fare"><button class="round" data-act="minus" aria-label="Lower by Rs 10">−</button><span class="grow" style="text-align:center"><span class="big" style="display:block;font-size:30px">${ZD.rs(val)}</span><span class="s">${hint}</span></span><button class="round" data-act="plus" aria-label="Raise by Rs 10">+</button></div>
-      <div class="s" style="text-align:center;padding-bottom:4px">Lowest you can offer: ${ZD.rs(g.min_offer)}</div>` : ''}</div>`;
+    const g = P.guides[v]; const on = v === P.veh; const x = P.offer[v + svc];
+    const hint = x < g.suggested ? 'Below recommended: fewer drivers may answer' : x > g.suggested ? 'Above recommended: faster pick-up' : 'Recommended fare';
+    const head = `${ZD.vehIcon(v)}<span class="grow"><b style="display:block;font-size:17px">${esc(vname(v))}${on ? ' <span class="info" aria-hidden="true">i</span>' : ''}</b><span class="s" style="display:block;color:var(--ink-2)">${seatTxt(v)}${svc === 'food' ? ' · food rates' : ''}</span><span class="s" style="display:block">${VEH_NOTE[v]}</span></span>`;
+    if (!on) return `<button class="veh" data-act="veh" data-v="${v}" aria-pressed="false">${head}<b class="price-r">~${ZD.rs(g.suggested)}</b></button>`;
+    return `<div class="veh-wrap on"><div class="veh">${head}<button class="pen" data-act="pen" aria-label="Type your fare">${I.pen}</button></div>
+      ${P.typing ? `<div class="fare"><input id="fareIn" class="input grow" inputmode="numeric" value="${x}" aria-label="Your fare in rupees" style="text-align:center;font-size:24px;font-weight:700"><button class="btn dark small" data-act="setfare">Done</button></div>`
+        : `<div class="fare"><button class="round" data-act="minus" aria-label="Lower by Rs 10">−</button><span class="grow" style="text-align:center"><span class="big" style="display:block;font-size:30px">${ZD.rs(x)}</span><span class="s">${hint}</span></span><button class="round" data-act="plus" aria-label="Raise by Rs 10">+</button></div>`}</div>`;
   }).join('');
-  screen(`<div class="route">
-      <div class="stop"><span class="dot"></span><span class="grow ell">${esc(P.from.name)}</span></div>
-      <div class="stop"><span class="sq"></span><span class="grow"><span class="ell" style="display:block">${esc(P.to.name)}</span><span class="s">~${P.route.minutes} min · ${P.route.km} km${P.route.source === 'estimate' ? ' (estimate)' : ''}</span></span><button class="chip" data-act="edit">Change</button></div>
-    </div>
-    ${list}${extra}
-    <div class="row sticky"><span class="soft small row" style="height:54px;padding:0 12px;font-weight:600"><svg width="20" height="14" viewBox="0 0 20 14" aria-hidden="true"><rect width="20" height="14" rx="2" fill="#0E6B47"/><circle cx="10" cy="7" r="3" fill="#E7F6EE"/></svg>Cash</span>
-    <button class="btn primary grow" data-act="find">Find drivers · ${ZD.rs(P.offer[P.veh + svc])}</button></div>`, {
-    veh(b) { keepNote(); P.veh = b.dataset.v; renderFare(); },
-    minus() { keepNote(); const k = P.veh + svc; P.offer[k] = Math.max(Math.ceil(P.guides[P.veh].min_offer / 10) * 10, P.offer[k] - 10); renderFare(); },
+  screen(`${list}${extra}
+    <div class="sticky col" style="gap:10px">
+      <label class="row auto-row"><span class="auto-ic">${I.plane}</span><span class="grow" style="font-size:16px">Auto-accept offer of ${ZD.rs(val())}</span><input type="checkbox" class="switch" id="auto" ${P.auto ? 'checked' : ''}></label>
+      <div class="row"><span class="cash-ic" title="Cash"><svg width="30" height="20" viewBox="0 0 20 14" aria-label="Cash"><rect width="20" height="14" rx="2" fill="#2E9E5B"/><circle cx="10" cy="7" r="3" fill="#E7F6EE"/></svg></span>
+      <button class="btn primary grow" data-act="find">Find drivers</button>
+      <button class="icon-plain" data-act="opts" aria-label="Comment for the driver">${I.sliders}</button></div>
+    </div>`, {
+    veh(b) { keepNote(); P.veh = b.dataset.v; P.typing = false; renderFare(); },
+    minus() { keepNote(); const k = P.veh + svc; const lo = Math.ceil(P.guides[P.veh].min_offer / 10) * 10; if (P.offer[k] - 10 < lo) ZD.toast('Lowest you can offer: ' + ZD.rs(lo)); P.offer[k] = Math.max(lo, P.offer[k] - 10); renderFare(); },
     plus() { keepNote(); const k = P.veh + svc; P.offer[k] = P.offer[k] + 10; renderFare(); },
+    pen() { keepNote(); P.typing = true; renderFare(); setTimeout(() => { const i = document.getElementById('fareIn'); if (i) { i.focus(); i.select(); } }, 50); },
+    setfare() { keepNote(); const n = Math.round(+document.getElementById('fareIn').value || 0); const lo = Math.ceil(P.guides[P.veh].min_offer); if (n < lo) return ZD.toast('Lowest you can offer: ' + ZD.rs(lo)); P.offer[P.veh + svc] = n; P.typing = false; renderFare(); },
+    opts() { keepNote(); P.showNote = true; renderFare(); setTimeout(() => { const n = document.getElementById('note'); if (n) { n.scrollIntoView({ block: 'center' }); n.focus(); } }, 50); },
     edit() { keepNote(); whereTo('to'); },
+    back() { keepNote(); home(); },
     async find(b) { keepNote(); if (svc === 'food' && !P.note.trim()) return ZD.toast('Write what the rider should pick up');
       busy(b, 'Sending your request…');
-      try { P.trip = await api('POST', '/trips', { service: svc, vehicle: P.veh, from: P.from.name, to: P.to.name, from_lat: P.from.lat, from_lng: P.from.lng, to_lat: P.to.lat, to_lng: P.to.lng, offer: P.offer[P.veh + svc], note: P.note });
+      try { P.trip = await api('POST', '/trips', { service: svc, vehicle: P.veh, from: P.from.name, to: P.to.name, from_lat: P.from.lat, from_lng: P.from.lng, to_lat: P.to.lat, to_lng: P.to.lng, offer: val(), note: P.note, auto_accept: P.auto ? 1 : 0 });
         searching(); } catch (e) { fail(e, b); } },
-  }, 'tall');
+  }, 'fare');
+  document.getElementById('auto').addEventListener('change', e => { P.auto = e.target.checked; });
+  const sel = document.querySelector('.veh-wrap.on'); if (sel && sel.offsetTop > 120) $sheet.scrollTop = sel.offsetTop - 16;
+  overlay(`<div class="route-card grow"><button class="rc-row" data-act="back" aria-label="Change pick-up"><span class="rc-ic">${I.person}</span><span class="grow ell">${esc(P.from.name)}</span></button>
+    <div class="rc-row"><span class="rc-ic">${I.flag}</span><span class="grow" style="min-width:0"><span class="ell" style="display:block">${esc(P.to.name)}</span><span style="display:block">~${P.route.minutes} min.${P.route.source === 'estimate' ? ' (estimate)' : ''}</span></span><button class="plus-btn" data-act="edit" aria-label="Change drop-off">+</button></div></div>`);
+  overlay(`<button class="icon-btn big" data-act="back" aria-label="Back">${ZD.icon.back}</button>`, 'back-fab');
 }
 function keepNote() { const n = document.getElementById('note'); if (n) P.note = n.value; }
 
@@ -235,7 +255,7 @@ function searching() {
   const t = P.trip; const seen = {};
   let started = Date.now(), cancelArm = false;
   screen(`<div class="pulse"><i></i></div>
-    <div style="text-align:center"><h2 class="title">Finding drivers</h2><div class="muted">Your offer <b style="color:var(--ink)">${ZD.rs(t.offer)}</b> · ${esc(P.cfg ? P.cfg.vehicles[t.vehicle] : t.vehicle)} · cash</div></div>
+    <div style="text-align:center"><h2 class="title">Finding drivers</h2><div class="muted">Your offer <b style="color:var(--ink)">${ZD.rs(t.offer)}</b> · ${esc(vname(t.vehicle))} · cash</div>${t.auto_accept ? `<div class="ok-note" style="margin-top:8px">Auto-accept is on: the first driver who takes ${ZD.rs(t.offer)} gets the trip.</div>` : ''}</div>
     <div class="col" id="offers"></div>
     <div class="muted small" id="hint" style="text-align:center">Drivers nearby can accept your price or offer theirs. You choose.</div>
     <div class="row"><button class="btn ghost" data-act="raise">Raise to ${ZD.rs(Math.ceil(t.offer * 1.1 / 10) * 10)}</button><button class="btn danger" data-act="cancel">Cancel</button></div>`, {
@@ -258,7 +278,7 @@ function searching() {
       box.innerHTML = offers.map(o => {
         const left = Math.max(0, 30 - (Date.now() - seen[o.id]) / 1000);
         const counter = +o.price > +t.offer;
-        return `<div class="offer"><div class="row"><span class="av">${esc(ZD.initials(o.name))}</span><span class="grow"><b>${esc(o.name)}</b> <span class="s">★ ${(+o.rating).toFixed(1)}</span><span class="s" style="display:block">${esc(P.cfg ? P.cfg.vehicles[o.vehicle] : o.vehicle)} · ${esc(o.plate || '')}</span></span>
+        return `<div class="offer"><div class="row"><span class="av">${esc(ZD.initials(o.name))}</span><span class="grow"><b>${esc(o.name)}</b> <span class="s">★ ${(+o.rating).toFixed(1)}</span><span class="s" style="display:block">${esc(vname(o.vehicle))} · ${esc(o.plate || '')}</span></span>
           <span style="text-align:right"><b class="num" style="font-size:20px">${ZD.rs(o.price)}</b><span class="s" style="display:block">${counter ? 'Counter offer' : 'Your price'}</span></span></div>
           <div class="timer"><i style="width:${left / 30 * 100}%"></i></div>
           <button class="btn primary small" style="width:100%" data-act="accept" data-id="${o.id}">Accept ${ZD.rs(o.price)}</button></div>`;
@@ -334,6 +354,11 @@ function done() {
 function header(title) { return `<div class="row"><button class="icon-btn" style="box-shadow:none" data-act="back" aria-label="Back">${ZD.icon.back}</button><h2 class="title grow">${title}</h2></div>`; }
 const ROUND = (act, label, svg) => `<button class="round-tile" data-act="${act}"><span>${svg}</span>${label}</button>`;
 const I = {
+  pen: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM16 4l4 4 1-1a2 2 0 0 0 0-3 2 2 0 0 0-3 0z"/></svg>',
+  plane: '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22 2L2 10l7 3 3 7z"/><path d="M3 21l4-4M2 17l3-3M7 22l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  sliders: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>',
+  person: '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="5" r="3" fill="#111418"/><path d="M4 21l2-8 4-3 5 2 3 4-2 1-3-3-2 2 1 5z" fill="#111418"/></svg>',
+  flag: '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v18" stroke="#111418" stroke-width="2.4" stroke-linecap="round"/><path d="M6 4h13l-3 5 3 5H6z" fill="#111418"/></svg>',
   clock: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   help: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/></svg>',
   pin: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',

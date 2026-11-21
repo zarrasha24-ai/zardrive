@@ -49,7 +49,8 @@ final class Api
                 $d = Db::one('SELECT vehicle, plate, verified, online, rating, plan, plan_until FROM drivers WHERE user_id = ?', [$uid]);
                 $me['driver'] = $d + ['vehicle_label' => Schema::VEHICLES[$d['vehicle']] ?? $d['vehicle'], 'wallet' => Wallet::balance($uid), 'blocked' => Trips::driverBlock($uid),
                     'passes' => ['day' => Wallet::passPrice($d['vehicle'], 'day'), 'week' => Wallet::passPrice($d['vehicle'], 'week')], 'commission_pct' => Settings::num('commission_pct', 6), 'min_wallet' => Settings::num('min_wallet', 200),
-                    'today' => Db::one("SELECT COUNT(*) trips, COALESCE(SUM(fare), 0) fares FROM trips WHERE driver_id = ? AND status = 'completed' AND completed_at >= ?", [$uid, date('Y-m-d 00:00:00')])];
+                    'today' => Db::one("SELECT COUNT(*) trips, COALESCE(SUM(fare), 0) fares FROM trips WHERE driver_id = ? AND status = 'completed' AND completed_at >= ?", [$uid, date('Y-m-d 00:00:00')]),
+                    'trips_total' => (int) Db::val("SELECT COUNT(*) FROM trips WHERE driver_id = ? AND status = 'completed'", [$uid])];
             }
             return $me;
         }

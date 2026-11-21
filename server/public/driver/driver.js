@@ -11,9 +11,11 @@ let handlers = {};
 function screen(html, on, mode, keepTimers) {
   if (!keepTimers) ZD.clearTimers();
   document.body.classList.toggle('full', mode === 'full' || mode === 'night');
-  document.body.classList.toggle('night', mode === 'night');
+  document.body.classList.toggle('night', mode === 'night' || mode === 'nightmap');
+  document.body.classList.toggle('reqm', mode === 'nightmap');
   document.body.classList.toggle('tall', mode === 'tall');
-  document.querySelector('meta[name=theme-color]').content = mode === 'night' ? '#0C0F12' : '#FFFFFF';
+  document.querySelectorAll('.map-ov').forEach(n => n.remove());
+  document.querySelector('meta[name=theme-color]').content = (mode === 'night' || mode === 'nightmap') ? '#0C0F12' : '#FFFFFF';
   $sheet.innerHTML = html; if (!keepTimers) $sheet.scrollTop = 0;
   handlers = on || {};
   ZD.refreshMap();
@@ -22,9 +24,25 @@ $sheet.addEventListener('click', e => { const b = e.target.closest('[data-act]')
 function busy(b, t) { if (b) { b.disabled = true; b.dataset.t = b.textContent; b.textContent = t || 'Please wait…'; } }
 function unbusy(b) { if (b) { b.disabled = false; b.textContent = b.dataset.t || b.textContent; } }
 function fail(e, b) { unbusy(b); if (e.status === 401) { ZD.store(TK, null); return signIn(); } ZD.toast(e.message); }
-const nav = (on) => `<div class="tabsbar sticky">
-  ${[['home', 'Requests'], ['wallet', 'Wallet'], ['menu', 'Account']].map(([k, l]) => `<button class="btn small ${k === on ? 'primary' : 'ghost'}" style="width:100%" data-act="go_${k}">${l}</button>`).join('')}</div>`;
-const navHandlers = { go_home: () => home(), go_wallet: () => wallet(), go_menu: () => menu() };
+const DI = {
+  menu: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+  gear: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2l2 3 3.5-.8.8 3.5 3 2-2 3 .8 3.5-3.5.8-2 3-3-2-3.5.8-.8-3.5-3-2 2-3-.8-3.5 3.5-.8z"/></svg>',
+  list: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>',
+  perf: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
+  dots: '<svg width="6" height="22" viewBox="0 0 6 22" aria-hidden="true"><circle cx="3" cy="3" r="2.6" fill="currentColor"/><circle cx="3" cy="11" r="2.6" fill="currentColor"/><circle cx="3" cy="19" r="2.6" fill="currentColor"/></svg>',
+  clock: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 13l4-4 4 4"/></svg>',
+  chev: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+  x: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  car: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 16v-3l2-5h14l2 5v3zM6 16v2M18 16v2"/><circle cx="7.5" cy="13" r="1"/><circle cx="16.5" cy="13" r="1"/></svg>',
+  wallet: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M16 11h5v4h-5a2 2 0 0 1 0-4zM6 6l9-3 1 3"/></svg>',
+  shield: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg>',
+  chat: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2.5"/><path d="M8 17v4l4-4M8 10h.01M12 10h.01M16 10h.01"/></svg>',
+};
+const VLABEL = { economy: 'Mini', bike: 'Moto', comfort: 'Ride A/C', rickshaw: 'Rickshaw', loader: 'Freight' };
+const SVC_TAG = { food: 'Food', courier: 'Courier', intercity: 'City to city', freight: 'Freight' };
+const km1 = (k) => (k == null ? '' : '~' + String((+k).toFixed(1)).replace('.', ',') + ' km');
+const nav = (on) => `<nav class="dnav sticky"><button data-act="go_home" class="${on === 'home' ? 'on' : ''}">${DI.list}<span>Ride requests</span></button><button data-act="go_perf" class="${on === 'perf' ? 'on' : ''}">${DI.perf}<span>Performance</span></button></nav>`;
+const navHandlers = { go_home: () => home(), go_wallet: () => wallet(), go_menu: () => menu(), go_perf: () => perf(), go_settings: () => settings() };
 
 // ---------- location: sent while online or on a trip
 function startTracking() {
@@ -93,25 +111,23 @@ function waiting() {
   }, 'full');
 }
 
-// ---------- home: online toggle and requests
+// ---------- home: online switch and ride requests (night mode, inDrive layout)
 async function home() {
   const my = ++D.seq;
   try { await refreshMe(); } catch (e) { return fail(e); }
   if (my !== D.seq) return;  // the driver moved to another screen meanwhile
   const dv = D.me.driver; const online = +dv.online === 1;
   if (online) startTracking(); else stopTracking();
-  screen(`<div class="row"><span class="av" style="background:var(--red);color:#fff">${esc(ZD.initials(D.me.name))}</span>
-      <span class="grow"><b>${esc(D.me.name)}</b><span class="s" style="display:block">★ ${(+dv.rating).toFixed(1)} · ${esc(dv.vehicle_label)} · ${esc(dv.plate || '')}</span></span>
-      <button class="chip" data-act="go_wallet" style="height:auto;padding:6px 12px;text-align:right"><span class="s" style="display:block">Wallet</span><b class="num">${ZD.rs(dv.wallet)}</b></button></div>
-    <button class="toggle ${online ? 'on' : 'off'}" data-act="toggle" aria-pressed="${online}"><i></i>${online ? 'Online · finding requests' : 'Go online'}</button>
+  screen(`<div class="dtop"><button class="dt-btn" data-act="go_menu" aria-label="Menu">${DI.menu}</button>
+      <button class="olt" data-act="toggle" role="switch" aria-checked="${online}" aria-label="${online ? 'Online. Tap to go offline' : 'Offline. Tap to go online'}"><span class="${online ? '' : 'act off'}">Offline</span><span class="${online ? 'act on' : ''}">Online</span></button>
+      <button class="dt-btn" data-act="go_settings" aria-label="Settings">${DI.gear}</button></div>
+    <button class="goal" data-act="go_perf"><span class="coin">Rs</span><span class="grow"><b>${ZD.rs(dv.today.fares)}</b> today</span><span class="goal-n">${dv.today.trips} ${+dv.today.trips === 1 ? 'trip' : 'trips'}</span></button>
     ${dv.blocked && online ? `<div class="warn-note row"><span class="grow">${esc(dv.blocked)}</span>${/wallet|Top up/i.test(dv.blocked) ? '<button class="btn small primary" data-act="go_wallet">Top up</button>' : ''}</div>` : ''}
-    <div class="kpis"><div class="kpi"><b>${ZD.rs(dv.today.fares)}</b><span>fares today</span></div><div class="kpi"><b>${dv.today.trips}</b><span>trips today</span></div><div class="kpi"><b>${(+dv.commission_pct)}%</b><span>${dv.plan === 'per_trip' ? 'per trip' : esc(dv.plan) + ' pass'}</span></div></div>
-    <div class="col" id="reqs">${online ? '<div class="muted" style="text-align:center;padding:16px">Looking for requests near you…</div>' : '<div class="muted" style="text-align:center;padding:16px">You are offline. No requests are sent to you.</div>'}</div>
+    <div id="reqs" class="rq-list">${online ? '<div class="muted" style="text-align:center;padding:24px 16px">Looking for ride requests near you…</div>' : '<div class="muted" style="text-align:center;padding:24px 16px">You are offline. Go online to see ride requests.</div>'}</div>
     ${nav('home')}`, Object.assign({
     async toggle(b) { busy(b); const pos = await ZD.here(6000); if (pos) D.pos = pos;
       try { await api('POST', '/driver/online', Object.assign({ online: online ? 0 : 1 }, D.pos || {})); home(); } catch (e) { fail(e, b); } },
-    async offer(b) { const id = +b.dataset.id, price = +b.dataset.p; busy(b, 'Sending…');
-      try { await api('POST', `/trips/${id}/offers`, { price }); D.sent[id] = { price, at: Date.now() }; drawReqs(D.lastReqs || []); } catch (e) { fail(e, b); delete D.sent[id]; } },
+    open(b) { const r = (D.lastReqs || []).find(x => x.id == b.dataset.id); if (r) request(r); },
   }, navHandlers), 'night');
   if (!online) return;
   ZD.every(4000, async () => {
@@ -121,26 +137,63 @@ async function home() {
       const r = await api('GET', '/driver/requests'); D.lastReqs = r.requests; drawReqs(r.requests);
     } catch (e) {
       if (e.status === 401) return fail(e);
-      const box = document.getElementById('reqs'); if (box) box.innerHTML = `<div class="warn-note">${esc(e.message)}</div>`;
+      const box = document.getElementById('reqs'); if (box) box.innerHTML = `<div class="warn-note" style="margin:12px 16px">${esc(e.message)}</div>`;
     }
   });
+}
+function rqTags(r) {
+  return `<span class="tags"><span class="tag cash">Cash</span>${SVC_TAG[r.service] ? `<span class="tag svc">${esc(SVC_TAG[r.service])}</span>` : ''}<span class="tag tveh">${esc(VLABEL[r.vehicle] || r.vehicle)}</span></span>`;
+}
+function rqWho(r) {
+  return `<span class="rq-who"><span class="av gray">${esc(ZD.initials(r.passenger_name))}</span><span class="nm ell">${esc(r.passenger_name)}</span>
+    <span class="rt"><span style="color:#E5A52E">★</span> ${r.passenger_rating ? (+r.passenger_rating).toFixed(1) : 'New'}${r.passenger_trips ? ` (${r.passenger_trips})` : ''}</span>${r.pickup_min ? `<span class="rt">${r.pickup_min} min.</span>` : ''}</span>`;
 }
 function drawReqs(list) {
   const box = document.getElementById('reqs'); if (!box) return;
   const waitingIds = Object.keys(D.sent).filter(id => Date.now() - D.sent[id].at < 35000);
-  const sentCards = waitingIds.map(id => `<div class="card row"><div class="pulse" style="width:36px;height:36px;margin:0"><i style="width:12px;height:12px"></i></div><span class="grow">Offer ${ZD.rs(D.sent[id].price)} sent. Waiting for the passenger…</span></div>`).join('');
+  const sentCards = waitingIds.map(id => `<div class="rq-wait row"><div class="pulse" style="width:36px;height:36px;margin:0"><i style="width:12px;height:12px"></i></div><span class="grow">Offer ${ZD.rs(D.sent[id].price)} sent. Waiting for the passenger…</span></div>`).join('');
   const open = list.filter(r => !D.sent[r.id]);
-  box.innerHTML = sentCards + (open.map(r => {
-    const base = +r.offer; const ups = [1.1, 1.2, 1.3].map(f => Math.ceil(base * f / 10) * 10);
-    const svc = D.cfg ? D.cfg.services[r.service] : r.service;
-    return `<div class="offer">
-      <div class="row small"><span class="chip" style="height:24px;padding:0 8px;font-size:11.5px;font-weight:700">${esc(svc)}</span><span class="grow muted">${esc(r.passenger_name)}${r.passenger_rating ? ' · ★ ' + r.passenger_rating : ''}</span><span class="muted">${r.pickup_km != null ? '~' + r.pickup_km + ' km away' : ''}</span></div>
-      <div class="col" style="gap:4px;font-size:14.5px"><span class="row"><span class="dot" style="background:#fff"></span><span class="grow">${esc(r.from_text)}</span></span><span class="row"><span class="sq"></span><span class="grow">${esc(r.to_text)}</span></span></div>
-      ${r.note ? `<div class="soft small">${esc(r.note)}</div>` : ''}
-      <div class="row"><b class="num" style="font-size:28px">${ZD.rs(base)}</b><span class="muted grow">offered · ${r.km} km</span></div>
-      <div class="tabsbar">${ups.map(p => `<button class="btn ghost small" style="width:100%" data-act="offer" data-id="${r.id}" data-p="${p}">${ZD.rs(p)}</button>`).join('')}</div>
-      <button class="btn primary" data-act="offer" data-id="${r.id}" data-p="${base}">Accept ${ZD.rs(base)}</button></div>`;
-  }).join('') || (waitingIds.length ? '' : '<div class="muted" style="text-align:center;padding:16px">No requests right now. Stay online, busy areas: Saddar, University Road, Hayatabad.</div>'));
+  box.innerHTML = sentCards + (open.map(r => `<button class="rq" data-act="open" data-id="${r.id}">${rqWho(r)}
+      <span class="rq-body"><span class="km">${km1(r.pickup_km)}</span><span class="pr"><b class="num">${ZD.rs(r.offer)}</b>${r.fair ? `<span class="fair">${DI.clock} Fair price</span>` : ''}</span>
+      <span class="a">${esc(r.from_text)}</span><span class="b">${esc(r.to_text)}</span>${rqTags(r)}</span><span class="rq-dots">${DI.dots}</span></button>`).join('')
+    || (waitingIds.length ? '' : '<div class="muted" style="text-align:center;padding:24px 16px">No requests right now. Stay online: busy areas are Saddar, University Road and Hayatabad.</div>'));
+}
+
+// ---------- one ride request: map, accept or offer your fare
+function request(r) {
+  ++D.seq;
+  const base = +r.offer; let more = false;
+  const ups = () => (more ? [1.2, 1.3, 1.4] : [1.05, 1.1, 1.15]).map(f => Math.ceil(Math.round(base * f * 100) / 500) * 5);
+  const draw = () => screen(`<div class="row" style="align-items:flex-start;gap:14px">${rqWho(r)}
+      <span class="rq-body"><span class="km">${km1(r.pickup_km)}</span><span class="pr"><b class="num">${ZD.rs(base)}</b>${r.fair ? `<span class="fair">${DI.clock} Fair price</span>` : ''}</span>
+        <span class="ab"><i class="pa">A</i><span>${esc(r.from_text)}</span></span><span class="ab"><i class="pb">B</i><span>${esc(r.to_text)}</span></span>${rqTags(r)}</span></div>
+    ${r.note ? `<div class="soft small"><b>Note:</b> ${esc(r.note)}</div>` : ''}
+    <div class="muted small" style="text-align:center">Trip ${r.km} km · passenger pays cash</div>
+    <button class="btn primary big-btn" data-act="offer" data-p="${base}">Accept for ${ZD.rs(base)}</button>
+    <div class="muted" style="text-align:center;font-size:17px">Offer your fare</div>
+    <div class="row" style="gap:8px">${ups().map(p => `<button class="fare-chip" data-act="offer" data-p="${p}">${ZD.rs(p)}</button>`).join('')}<button class="fare-more" data-act="more" aria-label="${more ? 'Lower fares' : 'Higher fares'}">${more ? '‹' : DI.chev}</button></div>
+    <button class="btn close-btn" data-act="close">Close</button>`, {
+    async offer(b) { const price = +b.dataset.p; busy(b, 'Sending…');
+      try { await api('POST', `/trips/${r.id}/offers`, { price }); D.sent[r.id] = { price, at: Date.now() }; ZD.toast(price === base ? 'Accepted. Waiting for the passenger…' : `Offer ${ZD.rs(price)} sent`); home(); } catch (e) { fail(e, b); } },
+    more() { more = !more; draw(); poll(); },
+    close() { home(); },
+  }, 'nightmap');
+  const poll = () => ZD.every(4000, async () => {
+    try {
+      const a = (await api('GET', '/my/active')).trip;
+      if (a && a.status === 'accepted') { D.trip = a; ZD.toast('Your offer was accepted'); return trip(); }
+      const list = (await api('GET', '/driver/requests')).requests; D.lastReqs = list;
+      if (!list.some(x => x.id === r.id)) { ZD.toast('This request is no longer open'); home(); }
+    } catch (e) { if (e.status === 401) fail(e); }
+  });
+  draw(); poll();
+  const ov = document.createElement('div'); ov.className = 'map-ov req-title'; ov.textContent = 'Ride request'; document.body.appendChild(ov);
+  ZD.clearMap(); const pts = [];
+  if (r.from_lat) { ZD.pin(+r.from_lat, +r.from_lng, 'from'); pts.push([+r.from_lat, +r.from_lng]); }
+  if (r.to_lat) { ZD.pin(+r.to_lat, +r.to_lng, 'to'); pts.push([+r.to_lat, +r.to_lng]); }
+  if (pts.length === 2) ZD.line(pts);
+  if (D.pos) { ZD.pin(D.pos.lat, D.pos.lng, 'car'); pts.push([D.pos.lat, D.pos.lng]); }
+  if (pts.length) ZD.fit(pts);
 }
 
 // ---------- live trip
@@ -203,7 +256,7 @@ async function wallet() {
   if (my !== D.seq) return;
   const dv = D.me.driver; let amt = 1000, method = 'jazzcash';
   const KIND = { topup: 'Top-up', commission: 'Trip fee', food_share: 'Food share', pass: 'Pass', refund: 'Refund' };
-  const draw = () => screen(`<h2 class="title">Wallet</h2>
+  const draw = () => screen(`<div class="row"><button class="icon-btn" style="box-shadow:none" data-act="go_home" aria-label="Back">${ZD.icon.back}</button><h2 class="title grow">Wallet</h2></div>
     <div class="card col" style="background:var(--ink);color:#fff;border:0"><span class="small" style="color:#C9CED4">Balance for ZarDrive fees</span><span class="big">${ZD.rs2(w.balance)}</span>
       <span class="small" style="color:#C9CED4">Passengers pay you cash. The ${dv.commission_pct}% fee comes off this balance after each trip; below ${ZD.rs(dv.min_wallet)} you stop getting requests.</span></div>
     <h3 style="margin:4px 0 0;font-size:16px">Top up</h3>
@@ -217,7 +270,7 @@ async function wallet() {
     ${dv.plan !== 'per_trip' && dv.plan_until ? `<div class="ok-note">${esc(dv.plan)} pass active until ${esc(ZD.when(dv.plan_until))}</div>` : ''}
     <h3 style="margin:8px 0 0;font-size:16px">History</h3>
     <div>${(w.history || []).map(h => `<div class="hist"><span class="grow"><b style="display:block">${esc(KIND[h.kind] || h.kind)}</b><span class="s">${esc(h.note || '')} · ${esc(ZD.when(h.created_at))}</span></span><span style="text-align:right"><b style="color:${+h.amount < 0 ? '#912018' : 'var(--good)'}">${+h.amount < 0 ? '−' : '+'} ${ZD.rs2(Math.abs(+h.amount))}</b><span class="s" style="display:block">${ZD.rs2(h.balance_after)}</span></span></div>`).join('') || '<div class="muted">No wallet activity yet.</div>'}</div>
-    ${nav('wallet')}`, Object.assign({
+    `, Object.assign({
     method(b) { method = b.dataset.m; draw(); }, amt(b) { amt = +b.dataset.a; draw(); },
     async topup(b) { const tid = document.getElementById('tid').value.trim(); if (tid.length < 6) return ZD.toast('Enter the transaction ID from the SMS'); busy(b);
       try { await api('POST', '/wallet/topups', { method, tid, amount: amt }); ZD.toast('Top-up sent. It shows here once Accounts checks it.'); wallet(); } catch (e) { fail(e, b); } },
@@ -228,13 +281,66 @@ async function wallet() {
 
 function menu() {
   ++D.seq;
+  const dv = D.me.driver; const rt = +dv.rating || 5;
+  const stars = [1, 2, 3, 4, 5].map(i => `<span style="color:${i <= Math.round(rt) ? '#E5A52E' : '#4A525B'}">★</span>`).join('');
+  const item = (act, ic, label) => `<button class="dm-item" data-act="${act}">${ic}<span>${label}</span></button>`;
+  screen(`<div class="row" style="justify-content:flex-end"><button class="dt-btn" data-act="go_home" aria-label="Close menu">${DI.x}</button></div>
+    <button class="dm-head" data-act="go_settings"><span class="av" style="width:60px;height:60px;border-radius:30px;background:#2A3038;color:#fff">${esc(ZD.initials(D.me.name))}</span>
+      <span class="grow" style="text-align:left"><b style="display:block;font-size:20px">${esc(D.me.name)}</b><span style="font-size:17px">${stars} <span class="muted" style="font-size:15px">${rt.toFixed(2)}${dv.trips_total ? ` (${dv.trips_total})` : ''}</span></span></span>${DI.chev}</button>
+    <div class="dm-list">
+      ${item('go_home', DI.car, 'City rides')}${item('go_wallet', DI.wallet, 'Wallet')}${item('go_perf', DI.perf, 'Performance')}
+      ${item('safety', DI.shield, 'Safety')}${item('go_settings', DI.gear, 'Settings')}${item('support', DI.chat, 'Support')}
+    </div>
+    <a class="btn primary" href="/app" style="margin-top:auto">Passenger mode</a>
+    <div class="muted small" style="text-align:center">ZarDrive Driver test version · map data © OpenStreetMap contributors</div>`, Object.assign({
+    safety() { safety(); }, support() { support(); },
+  }, navHandlers), 'night');
+}
+async function perf() {
+  const my = ++D.seq;
+  try { await refreshMe(); } catch (e) { return fail(e); }
+  if (my !== D.seq) return;
   const dv = D.me.driver;
-  screen(`<h2 class="title">Account</h2>
-    <div class="card row"><span class="av" style="background:var(--red);color:#fff">${esc(ZD.initials(D.me.name))}</span><span class="grow"><b>${esc(D.me.name)}</b><span class="s" style="display:block">${esc(D.me.phone)} · ★ ${(+dv.rating).toFixed(1)}</span></span></div>
-    <div class="card col"><div class="row"><span class="grow muted">Vehicle</span><b>${esc(dv.vehicle_label)}</b></div><div class="row"><span class="grow muted">Number plate</span><b>${esc(dv.plate || '—')}</b></div><div class="row"><span class="grow muted">Plan</span><b>${dv.plan === 'per_trip' ? dv.commission_pct + '% per trip' : esc(dv.plan) + ' pass'}</b></div></div>
-    <button class="btn ghost" data-act="out">Sign out</button>
-    <div class="muted small">Map data © OpenStreetMap contributors. ZarDrive Driver test version.</div>
-    ${nav('menu')}`, Object.assign({ async out() { try { await api('POST', '/driver/online', { online: 0 }); } catch (e) {} stopTracking(); ZD.store(TK, null); signIn(); } }, navHandlers), 'full');
+  screen(`<div class="dtop"><button class="dt-btn" data-act="go_menu" aria-label="Menu">${DI.menu}</button><h2 class="title grow" style="text-align:center;color:#fff">Performance</h2><span style="width:48px"></span></div>
+    <div class="kpis"><div class="kpi"><b>${ZD.rs(dv.today.fares)}</b><span>fares today</span></div><div class="kpi"><b>${dv.today.trips}</b><span>trips today</span></div><div class="kpi"><b>★ ${(+dv.rating).toFixed(2)}</b><span>your rating</span></div></div>
+    <div class="card col"><div class="row"><span class="grow muted">ZarDrive fee</span><b>${dv.plan === 'per_trip' ? (+dv.commission_pct) + '% per trip' : esc(dv.plan) + ' pass · 0%'}</b></div>
+      <div class="row"><span class="grow muted">Wallet balance</span><b>${ZD.rs2(dv.wallet)}</b></div>
+      <div class="row"><span class="grow muted">Requests stop below</span><b>${ZD.rs(dv.min_wallet)}</b></div></div>
+    <button class="btn ghost" data-act="go_wallet">Wallet, top-up and passes</button>
+    <div class="muted small">Tips: accept fair-price requests quickly, keep your rating above 4.5, and stay online in busy areas (Saddar, University Road, Hayatabad) at lunch and evening.</div>
+    ${nav('perf')}`, navHandlers, 'night');
+}
+function settings() {
+  ++D.seq;
+  const dv = D.me.driver;
+  screen(`<div class="row"><button class="dt-btn" data-act="go_home" aria-label="Back">${ZD.icon.back}</button><h2 class="title grow" style="color:#fff">Settings</h2></div>
+    <div class="card col"><div class="row"><span class="grow muted">Name</span><b>${esc(D.me.name)}</b></div><div class="row"><span class="grow muted">Phone</span><b>${esc(D.me.phone)}</b></div>
+      <div class="row"><span class="grow muted">Vehicle</span><b>${esc(dv.vehicle_label)}</b></div><div class="row"><span class="grow muted">Number plate</span><b>${esc(dv.plate || '—')}</b></div>
+      <div class="row"><span class="grow muted">Plan</span><b>${dv.plan === 'per_trip' ? dv.commission_pct + '% per trip' : esc(dv.plan) + ' pass'}</b></div><div class="row"><span class="grow muted">Language</span><b>English</b></div></div>
+    <div class="muted small">To change your name, vehicle or plate, write to Support. Our team checks the new papers first.</div>
+    <button class="btn danger" data-act="out">Sign out</button>`, Object.assign({ async out() { try { await api('POST', '/driver/online', { online: 0 }); } catch (e) {} stopTracking(); ZD.store(TK, null); signIn(); } }, navHandlers), 'night');
+}
+function safety() {
+  ++D.seq;
+  screen(`<div class="row"><button class="dt-btn" data-act="go_menu" aria-label="Back">${ZD.icon.back}</button><h2 class="title grow" style="color:#fff">Safety</h2></div>
+    <a class="btn primary" href="tel:15">Call police · 15</a><a class="btn ghost" href="tel:1122">Rescue · 1122</a>
+    <div class="card col small" style="line-height:1.5"><b>Before every trip</b><span>Check the pick-up and the passenger's name. Don't start the trip until the passenger is in the vehicle.</span>
+      <b>Cash</b><span>Collect the agreed fare only. Keep small notes for change.</span><b>Problems</b><span>If a passenger is rude or unsafe, end the trip in a public place and write to Support.</span></div>`, navHandlers, 'night');
+}
+function support() {
+  ++D.seq;
+  let topic = 'Fare or payment';
+  const topics = ['Fare or payment', 'App problem', 'Safety', 'Lost item', 'Other'];
+  const draw = (past) => screen(`<div class="row"><button class="dt-btn" data-act="go_menu" aria-label="Back">${ZD.icon.back}</button><h2 class="title grow" style="color:#fff">Support</h2></div>
+    <div class="chips">${topics.map(t => `<button class="chip" data-act="topic" aria-pressed="${t === topic}">${t}</button>`).join('')}</div>
+    <textarea id="hmsg" class="input" style="height:110px;background:#171B20;color:#fff;border-color:#343B43" maxlength="1000" placeholder="Tell us what happened"></textarea>
+    <button class="btn primary" data-act="send">Send to support</button>
+    ${past.length ? `<h3 style="margin:6px 0 0">Your requests</h3>${past.map(h => `<div class="card col small"><b>${esc(h.topic)} · ${esc(h.status)}</b><span>${esc(h.message)}</span><span class="muted">${esc(ZD.when(h.created_at))}</span></div>`).join('')}` : ''}`, Object.assign({
+    topic(b) { const m = document.getElementById('hmsg').value; topic = b.textContent; draw(past); document.getElementById('hmsg').value = m; },
+    async send(b) { busy(b, 'Sending…'); try { await api('POST', '/help', { topic, message: document.getElementById('hmsg').value }); ZD.toast('Sent. Support will call you soon.'); support(); } catch (e) { fail(e, b); } },
+  }, navHandlers), 'night');
+  draw([]);
+  api('GET', '/help').then(r => { if (r.requests.length) { const m = document.getElementById('hmsg'); const keep = m ? m.value : ''; draw(r.requests); const n = document.getElementById('hmsg'); if (n) n.value = keep; } }).catch(() => {});
 }
 
 boot();

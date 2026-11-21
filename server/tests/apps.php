@@ -75,6 +75,17 @@ ok($h['status'] === 'open' && count(api('GET', '/api/help', [], $p)['requests'])
 ok(err(fn() => api('POST', '/api/help', ['topic' => 'Nonsense', 'message' => 'hello there'], $p)) === 'Choose what the problem is about', 'unknown help topic refused');
 api('POST', '/api/trips/' . $t['id'] . '/hide', [], $p);
 ok(count(api('GET', '/api/my/trips', [], $p)['trips']) === 0 && count(api('GET', '/api/my/trips', [], $d)['trips']) === 1, 'removed from passenger history only; driver still sees it');
+echo "Auto-accept\n";
+$t2 = api('POST', '/api/trips', ['service' => 'ride', 'vehicle' => 'economy', 'from' => 'Shami Road', 'to' => 'Saddar', 'from_lat' => 34.0086, 'from_lng' => 71.5249, 'to_lat' => 33.992, 'to_lng' => 71.45, 'offer' => $rt['guide']['suggested'], 'auto_accept' => 1], $p);
+$rq = api('GET', '/api/driver/requests', [], $d)['requests'][0];
+ok($rq['pickup_min'] >= 1 && $rq['fair'] === true && $rq['passenger_trips'] === 1, 'request shows pick-up minutes, fair price and passenger trips');
+api('POST', '/api/trips/' . $t2['id'] . '/offers', ['price' => $t2['offer']], $d);
+ok(api('GET', '/api/my/active', [], $p)['trip']['status'] === 'accepted', 'auto-accept: driver taking the passenger price gets the trip at once');
+api('POST', '/api/trips/' . $t2['id'] . '/cancel', ['reason' => 'test'], $p);
+$t3 = api('POST', '/api/trips', ['service' => 'ride', 'vehicle' => 'economy', 'from' => 'Shami Road', 'to' => 'Saddar', 'from_lat' => 34.0086, 'from_lng' => 71.5249, 'to_lat' => 33.992, 'to_lng' => 71.45, 'offer' => $rt['guide']['suggested'], 'auto_accept' => 1], $p);
+api('POST', '/api/trips/' . $t3['id'] . '/offers', ['price' => $t3['offer'] + 30], $d);
+ok(api('GET', '/api/my/active', [], $p)['trip']['status'] === 'searching', 'auto-accept: a higher counter offer still waits for the passenger');
+api('POST', '/api/trips/' . $t3['id'] . '/cancel', ['reason' => 'test'], $p);
 echo "Maps\n";
 ok(api('GET', '/api/config')['maps']['provider'] === 'osm', 'no key: apps use OpenStreetMap');
 Zd\Settings::set('google_maps_key', 'AIzaTESTKEY0123456789012345678901234567', $admin);
