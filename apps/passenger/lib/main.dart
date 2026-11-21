@@ -1,5 +1,6 @@
 // ZarDrive: the Android app opens the ZarDrive passenger screens, with location and phone links handled by Android.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -42,6 +43,7 @@ class _ShellState extends State<Shell> {
   late final WebViewController web;
   bool loading = true;
   bool offline = false;
+  DateTime? lastBack;
 
   bool _isOurs(Uri u) => u.host == ourHost || u.host.endsWith('openstreetmap.org') || u.host == 'unpkg.com' || u.host.endsWith('googleapis.com') || u.host.endsWith('gstatic.com') || u.host.endsWith('google.com');
 
@@ -58,8 +60,12 @@ class _ShellState extends State<Shell> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
       ..setNavigationDelegate(NavigationDelegate(
+        // show the page as soon as it can be used, not after every map tile has arrived
+        onProgress: (p) {
+          if (p >= 60 && loading && mounted) setState(() { loading = false; });
+        },
         onPageFinished: (_) {
-          if (mounted) setState(() { loading = false; });
+          if (loading && mounted) setState(() { loading = false; });
         },
         onWebResourceError: (e) {
           if ((e.isForMainFrame ?? false) && mounted) setState(() { offline = true; loading = false; });
@@ -75,6 +81,7 @@ class _ShellState extends State<Shell> {
     final p = web.platform;
     if (p is AndroidWebViewController) {
       p.setMediaPlaybackRequiresUserGesture(false);
+      p.setTextZoom(100); // the phone's font size setting must not break the layout
       // <input type="file"> in the page (profile photo): pick from the gallery
       p.setOnShowFileSelector((params) async {
         final x = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 85);
@@ -87,7 +94,9 @@ class _ShellState extends State<Shell> {
         },
       );
     }
-    Permission.locationWhenInUse.request().whenComplete(() => web.loadRequest(Uri.parse(startUrl)));
+    // open the app at once; the location question is asked at the same time, not before
+    web.loadRequest(Uri.parse(startUrl));
+    Permission.locationWhenInUse.request();
   }
 
   @override
@@ -96,7 +105,26 @@ class _ShellState extends State<Shell> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        if (await web.canGoBack()) web.goBack();
+        // the page goes back one screen (window.zrBack); on its main screen, press back twice to leave the app
+        var handled = false;
+        try {
+          final r = (await web.runJavaScriptReturningResult('window.zrBack ? (window.zrBack() ? 1 : 0) : -1')).toString();
+          handled = r == '1' || r == '1.0';
+          // pages without their own back (older ZarDrive screens): browser history
+          if ((r == '-1' || r == '-1.0') && await web.canGoBack()) { web.goBack(); return; }
+        } catch (_) {
+          handled = false;
+        }
+        if (handled) return;
+        final now = DateTime.now();
+        if (lastBack != null && now.difference(lastBack!) < const Duration(seconds: 2)) {
+          SystemNavigator.pop();
+          return;
+        }
+        lastBack = now;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Press back again to close'), duration: Duration(seconds: 2)));
+        }
       },
       child: Scaffold(
         backgroundColor: Colors.white,
