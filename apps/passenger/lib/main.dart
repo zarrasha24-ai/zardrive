@@ -14,7 +14,7 @@ const String startUrl = String.fromEnvironment('START_URL', defaultValue: 'https
 const String ourHost = String.fromEnvironment('OUR_HOST', defaultValue: 'zardrive.zarrasha.com');
 const String appTitle = String.fromEnvironment('APP_TITLE', defaultValue: 'ZarDrive');
 // GMAP=1 when the build has a Google Maps key: the web screens may then open Google's native map (free inside the app)
-const bool gmapOn = bool.fromEnvironment('GMAP');
+const bool gmapOn = String.fromEnvironment('GMAP') == '1' || String.fromEnvironment('GMAP') == 'true';
 const int brandColor = int.fromEnvironment('BRAND_COLOR', defaultValue: 0xFFC8102E);
 
 void main() {
