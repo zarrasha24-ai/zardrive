@@ -1,5 +1,6 @@
 // ZarDrive Driver: the Android app opens the ZarDrive driver screens, with location and phone links handled by Android.
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -74,6 +75,16 @@ class _ShellState extends State<Shell> {
     final p = web.platform;
     if (p is AndroidWebViewController) {
       p.setMediaPlaybackRequiresUserGesture(false);
+      // <input type="file"> in the page (application documents): take a photo or choose one
+      p.setOnShowFileSelector((params) async {
+        final src = await showModalBottomSheet<ImageSource>(context: context, builder: (c) => SafeArea(child: Wrap(children: [
+          ListTile(leading: const Icon(Icons.photo_camera), title: const Text('Take a photo'), onTap: () => Navigator.pop(c, ImageSource.camera)),
+          ListTile(leading: const Icon(Icons.photo_library), title: const Text('Choose from gallery'), onTap: () => Navigator.pop(c, ImageSource.gallery)),
+        ])));
+        if (src == null) return <String>[];
+        final x = await ImagePicker().pickImage(source: src, maxWidth: 1400, imageQuality: 80);
+        return x == null ? <String>[] : <String>[Uri.file(x.path).toString()];
+      });
       p.setGeolocationPermissionsPromptCallbacks(
         onShowPrompt: (request) async {
           final s = await Permission.locationWhenInUse.request();
