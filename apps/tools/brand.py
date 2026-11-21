@@ -18,6 +18,12 @@ if '<queries>' in s:
     s = s.replace('<queries>', queries, 1)
 else:
     s = s.replace('</manifest>', '    ' + queries + '    </queries>\n</manifest>')
+# Google's native map (free inside the app): the key comes from the GitHub secret GOOGLE_MAPS_KEY, never from the code
+import os
+gkey = os.environ.get('GOOGLE_MAPS_KEY', '').strip()
+if gkey and 'com.google.android.geo.API_KEY' not in s:
+    s = s.replace('<application', '<application', 1)
+    s = re.sub(r'(<application[^>]*>)', r'\1\n        <meta-data android:name="com.google.android.geo.API_KEY" android:value="' + gkey + '"/>', s, count=1)
 man.write_text(s)
 res = proj / 'android/app/src/main/res'
 for d in ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']:

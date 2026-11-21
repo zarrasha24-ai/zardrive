@@ -35,13 +35,18 @@ jobs:
         working-directory: apps/${{ matrix.app }}
         run: flutter create --platforms android --org com.zarrasha --project-name ${{ matrix.app == 'passenger' && 'zardrive' || 'zardrive_driver' }} .
       - name: Add the app name, icon, id and permissions
+        env:
+          GOOGLE_MAPS_KEY: ${{ matrix.tag == 'rides-beta' && secrets.GOOGLE_MAPS_KEY || '' }}
         run: python3 apps/tools/brand.py ${{ matrix.app }} "${{ matrix.label }}" "${{ matrix.appid }}"
       - name: Build APK
         working-directory: apps/${{ matrix.app }}
+        env:
+          HAS_GMAP: ${{ matrix.tag == 'rides-beta' && secrets.GOOGLE_MAPS_KEY != '' && '1' || '0' }}
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos --no-fatal-warnings || true
-          flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 ${{ matrix.defines }}
+          echo "Google map in the app: $HAS_GMAP"
+          flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 ${{ matrix.defines }} --dart-define=GMAP=$HAS_GMAP
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.apk }}-apk

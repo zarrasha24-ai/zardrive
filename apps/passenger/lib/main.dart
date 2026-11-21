@@ -7,10 +7,14 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
+import 'gmap.dart';
+
 // The same app shell builds ZarDrive and the Zarrasha rides beta apps: values come from --dart-define at build time.
 const String startUrl = String.fromEnvironment('START_URL', defaultValue: 'https://zardrive.zarrasha.com/app');
 const String ourHost = String.fromEnvironment('OUR_HOST', defaultValue: 'zardrive.zarrasha.com');
 const String appTitle = String.fromEnvironment('APP_TITLE', defaultValue: 'ZarDrive');
+// GMAP=1 when the build has a Google Maps key: the web screens may then open Google's native map (free inside the app)
+const bool gmapOn = bool.fromEnvironment('GMAP');
 const int brandColor = int.fromEnvironment('BRAND_COLOR', defaultValue: 0xFFC8102E);
 
 void main() {
@@ -93,6 +97,10 @@ class _ShellState extends State<Shell> {
           return GeolocationPermissionsResponse(allow: s.isGranted, retain: s.isGranted);
         },
       );
+    }
+    if (gmapOn) {
+      final bridge = GBridge(web, () => context);
+      web.addJavaScriptChannel('ZRNative', onMessageReceived: (m) => bridge.onMessage(m.message));
     }
     // open the app at once; the location question is asked at the same time, not before
     web.loadRequest(Uri.parse(startUrl));
