@@ -9,6 +9,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -22,6 +23,15 @@ class GBridge {
   final _addr = StreamController<Map<String, dynamic>>.broadcast();
   final _updates = StreamController<Map<String, dynamic>>.broadcast();
   bool _trackOpen = false;
+  // Google's map under the whole app (version 2): where the page takes taps, the map padding, what to draw, camera moves
+  final rects = ValueNotifier<List<Rect>>(const []);
+  final layoutSeen = ValueNotifier<bool>(false);
+  final insets = ValueNotifier<EdgeInsets>(EdgeInsets.zero);
+  final scene = ValueNotifier<Map<String, dynamic>>(const {});
+  final _cam = StreamController<Map<String, dynamic>>.broadcast();
+
+  /** A new page is loading: until it reports its layout, the page takes every tap. */
+  void pageStarted() { layoutSeen.value = false; }
 
   void onMessage(String raw) {
     Map<String, dynamic> m;
@@ -45,6 +55,19 @@ class GBridge {
         break;
       case 'close':
         if (_trackOpen) Navigator.of(context()).maybePop();
+        break;
+      case 'layout':
+        rects.value = (m['rects'] is List ? m['rects'] as List : const []).whereType<List>().where((r) => r.length >= 4)
+            .map((r) => Rect.fromLTWH(_num(r[0], 0), _num(r[1], 0), _num(r[2], 0), _num(r[3], 0))).toList();
+        insets.value = EdgeInsets.only(top: _num(m['top'], 0), bottom: _num(m['bottom'], 0));
+        layoutSeen.value = true;
+        break;
+      case 'scene':
+        scene.value = m;
+        break;
+      case 'camera':
+      case 'fit':
+        _cam.add(m);
         break;
     }
   }
@@ -103,6 +126,166 @@ Future<BitmapDescriptor> _dot(String key, Color bg, {String text = '', IconData?
   final d = BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), width: size, height: size);
   _icons[key] = d;
   return d;
+}
+
+/// Markers and lines for what the page asked to show (pins: pickup/from = A, flag/to = B, car).
+Future<(Set<Marker>, Set<Polyline>, List<LatLng>)> buildScene(Map<String, dynamic> m) async {
+  final pins = (m['pins'] is List ? m['pins'] as List : const []).whereType<Map>().toList();
+  final mk = <Marker>{};
+  final all = <LatLng>[];
+  var i = 0;
+  for (final p in pins) {
+    final pos = LatLng(GBridge._num(p['lat'], 0), GBridge._num(p['lng'], 0));
+    all.add(pos);
+    final k = '${p['kind'] ?? ''}';
+    final BitmapDescriptor ic;
+    if (k == 'car') {
+      ic = await _dot('car', _ink, icon: Icons.directions_car, size: 38);
+    } else if (k == 'pickup' || k == 'from') {
+      ic = await _dot('a', _ink, text: 'A');
+    } else if (k == 'flag' || k == 'to') {
+      ic = await _dot('b', _red, text: 'B');
+    } else {
+      ic = await _dot('p', _red, text: '•', size: 26);
+    }
+    mk.add(Marker(markerId: MarkerId('p${i++}'), position: pos, icon: ic, anchor: const Offset(0.5, 0.5), zIndex: k == 'car' ? 3.0 : 1.0));
+  }
+  final ls = <Polyline>{};
+  var j = 0;
+  for (final l in (m['lines'] is List ? m['lines'] as List : const [])) {
+    final pts = (l is List ? l : const []).whereType<List>().where((p) => p.length >= 2).map((p) => LatLng(GBridge._num(p[0], 0), GBridge._num(p[1], 0))).toList();
+    if (pts.length < 2) continue;
+    all.addAll(pts);
+    ls.add(Polyline(polylineId: PolylineId('l${j++}'), points: pts, color: _red, width: 6, jointType: JointType.round, startCap: Cap.roundCap, endCap: Cap.roundCap));
+  }
+  return (mk, ls, all);
+}
+
+Future<void> fitCamera(GoogleMapController c, List<LatLng> all) async {
+  if (all.isEmpty) return;
+  if (all.length == 1) {
+    await c.animateCamera(CameraUpdate.newLatLngZoom(all.first, 15));
+    return;
+  }
+  var s0 = all.first.latitude, n0 = s0, w0 = all.first.longitude, e0 = w0;
+  for (final p in all) {
+    s0 = math.min(s0, p.latitude); n0 = math.max(n0, p.latitude);
+    w0 = math.min(w0, p.longitude); e0 = math.max(e0, p.longitude);
+  }
+  if ((n0 - s0).abs() < 0.0005 && (e0 - w0).abs() < 0.0005) {
+    await c.animateCamera(CameraUpdate.newLatLngZoom(all.first, 16));
+    return;
+  }
+  try {
+    await c.animateCamera(CameraUpdate.newLatLngBounds(LatLngBounds(southwest: LatLng(s0, w0), northeast: LatLng(n0, e0)), 56));
+  } catch (_) {}
+}
+
+/// Lets taps through to Google's map underneath, except where the page has its sheet, buttons and cards.
+class HitFilter extends SingleChildRenderObjectWidget {
+  const HitFilter({super.key, required this.rects, required this.on, super.child});
+  final List<Rect> rects;
+  final bool on;
+  @override
+  RenderHitFilter createRenderObject(BuildContext context) => RenderHitFilter(rects, on);
+  @override
+  void updateRenderObject(BuildContext context, RenderHitFilter r) { r..rects = rects..on = on; }
+}
+
+class RenderHitFilter extends RenderProxyBox {
+  RenderHitFilter(this.rects, this.on);
+  List<Rect> rects;
+  bool on;
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (on && !rects.any((r) => r.inflate(2).contains(position))) return false;
+    return super.hitTest(result, position: position);
+  }
+}
+
+/// Google's map under the whole app: draws what the page asks for and tells the page where the map was moved to.
+class BaseMap extends StatefulWidget {
+  const BaseMap({super.key, required this.bridge});
+  final GBridge bridge;
+  @override
+  State<BaseMap> createState() => _BaseMapState();
+}
+
+class _BaseMapState extends State<BaseMap> {
+  GoogleMapController? c;
+  Set<Marker> markers = {};
+  Set<Polyline> lines = {};
+  CameraPosition pos = const CameraPosition(target: LatLng(34.0086, 71.5249), zoom: 15);
+  Map<String, dynamic>? pending;
+  StreamSubscription<Map<String, dynamic>>? sub;
+  int ver = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.bridge.scene.addListener(_scene);
+    sub = widget.bridge._cam.stream.listen(_cmd);
+  }
+
+  @override
+  void dispose() {
+    widget.bridge.scene.removeListener(_scene);
+    sub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _scene() async {
+    final v = ++ver;
+    final (mk, ls, _) = await buildScene(widget.bridge.scene.value);
+    if (!mounted || v != ver) return;
+    setState(() { markers = mk; lines = ls; });
+  }
+
+  Future<void> _cmd(Map<String, dynamic> m) async {
+    final ctl = c;
+    if (ctl == null) { pending = m; return; }
+    if (m['cmd'] == 'camera') {
+      final t = LatLng(GBridge._num(m['lat'], 34.0086), GBridge._num(m['lng'], 71.5249));
+      final z = GBridge._num(m['zoom'], 0);
+      await ctl.animateCamera(z > 0 ? CameraUpdate.newLatLngZoom(t, z) : CameraUpdate.newLatLng(t));
+    } else {
+      final pts = (m['points'] is List ? m['points'] as List : const []).whereType<List>().where((p) => p.length >= 2)
+          .map((p) => LatLng(GBridge._num(p[0], 0), GBridge._num(p[1], 0))).toList();
+      await fitCamera(ctl, pts);
+    }
+  }
+
+  void _idle() => widget.bridge._js('window.ZD && ZD.gm && ZD.gm._idle(${pos.target.latitude}, ${pos.target.longitude}, ${pos.zoom})');
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<EdgeInsets>(
+      valueListenable: widget.bridge.insets,
+      builder: (_, pad, __) => GoogleMap(
+        initialCameraPosition: pos,
+        padding: pad,
+        myLocationEnabled: true,
+        myLocationButtonEnabled: false,
+        zoomControlsEnabled: false,
+        mapToolbarEnabled: false,
+        compassEnabled: false,
+        rotateGesturesEnabled: false,
+        tiltGesturesEnabled: false,
+        markers: markers,
+        polylines: lines,
+        onMapCreated: (ctl) {
+          c = ctl;
+          final p = pending;
+          pending = null;
+          if (p != null) _cmd(p);
+          _idle();
+        },
+        onCameraMoveStarted: () => widget.bridge._js('window.ZD && ZD.gm && ZD.gm._moving()'),
+        onCameraMove: (p) => pos = p,
+        onCameraIdle: _idle,
+      ),
+    );
+  }
 }
 
 class _Pin extends StatelessWidget {

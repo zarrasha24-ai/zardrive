@@ -46,6 +46,7 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   late final WebViewController web;
   bool loading = true;
+  GBridge? bridge; // Google's map (only in builds with a Google key)
   bool offline = false;
   DateTime? lastBack;
 
@@ -62,12 +63,13 @@ class _ShellState extends State<Shell> {
     super.initState();
     web = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white)
+      ..setBackgroundColor(gmapOn ? Colors.transparent : Colors.white)
       ..setNavigationDelegate(NavigationDelegate(
         // show the page as soon as it can be used, not after every map tile has arrived
         onProgress: (p) {
           if (p >= 60 && loading && mounted) setState(() { loading = false; });
         },
+        onPageStarted: (_) { bridge?.pageStarted(); },
         onPageFinished: (_) {
           if (loading && mounted) setState(() { loading = false; });
         },
@@ -99,12 +101,23 @@ class _ShellState extends State<Shell> {
       );
     }
     if (gmapOn) {
-      final bridge = GBridge(web, () => context);
-      web.addJavaScriptChannel('ZRNative', onMessageReceived: (m) => bridge.onMessage(m.message));
+      final b = bridge = GBridge(web, () => context);
+      web.addJavaScriptChannel('ZRNative', onMessageReceived: (m) => b.onMessage(m.message));
     }
-    // open the app at once; the location question is asked at the same time, not before
-    web.loadRequest(Uri.parse(startUrl));
+    _start();
     Permission.locationWhenInUse.request();
+  }
+
+  // open the app at once; the location question is asked at the same time, not before.
+  // With Google's map the page is told (ZRGMap/2 in the browser name) that the app draws the map underneath.
+  Future<void> _start() async {
+    if (gmapOn) {
+      try {
+        final ua = await web.getUserAgent();
+        await web.setUserAgent('${ua ?? ''} ZRGMap/2'.trim());
+      } catch (_) {}
+    }
+    await web.loadRequest(Uri.parse(startUrl));
   }
 
   @override
@@ -138,7 +151,17 @@ class _ShellState extends State<Shell> {
         backgroundColor: Colors.white,
         body: SafeArea(
           child: Stack(children: [
-            WebViewWidget(controller: web),
+            if (bridge != null) BaseMap(bridge: bridge!),
+            if (bridge != null)
+              ValueListenableBuilder<bool>(
+                valueListenable: bridge!.layoutSeen,
+                builder: (_, seen, __) => ValueListenableBuilder<List<Rect>>(
+                  valueListenable: bridge!.rects,
+                  builder: (_, rects, __) => HitFilter(on: seen, rects: rects, child: WebViewWidget(controller: web)),
+                ),
+              )
+            else
+              WebViewWidget(controller: web),
             if (loading) const Center(child: CircularProgressIndicator()),
             if (offline)
               Container(
