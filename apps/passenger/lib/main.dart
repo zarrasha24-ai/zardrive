@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
+import 'bio.dart';
 import 'gmap.dart';
 
 // The same app shell builds ZarDrive and the Zarrasha rides beta apps: values come from --dart-define at build time.
@@ -43,7 +44,8 @@ class Shell extends StatefulWidget {
   State<Shell> createState() => _ShellState();
 }
 
-class _ShellState extends State<Shell> {
+class _ShellState extends State<Shell> with WidgetsBindingObserver {
+  final bio = BioLock(); // fingerprint / face unlock
   late final WebViewController web;
   bool loading = true;
   GBridge? bridge; // Google's map (only in builds with a Google key)
@@ -106,6 +108,10 @@ class _ShellState extends State<Shell> {
       // tells the page from the very start that the app draws Google's map underneath (version 2)
       web.addJavaScriptChannel('ZRGMap2', onMessageReceived: (_) {});
     }
+    // fingerprint / face unlock: the page's Settings switch talks to the app here
+    web.addJavaScriptChannel('ZRBio', onMessageReceived: (m) => _bioMsg(m.message));
+    WidgetsBinding.instance.addObserver(this);
+    bio.load().then((_) { if (mounted) bio.unlock(appTitle); });
     _start();
     Permission.locationWhenInUse.request();
   }
@@ -123,11 +129,37 @@ class _ShellState extends State<Shell> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.paused) bio.paused();
+    if (s == AppLifecycleState.resumed) { bio.resumed(); if (bio.locked.value) bio.unlock(appTitle); }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // 'status' asks, 'on' / 'off' switches; the page is told the result (can this phone do it, is it on)
+  Future<void> _bioMsg(String m) async {
+    if (m == 'on' || m == 'off') await bio.setOn(m == 'on', appTitle);
+    try { await web.runJavaScript('window.ZD && ZD.bio && ZD.bio.got(${bio.can}, ${bio.on})'); } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) => Stack(children: [
+        _body(context),
+        ValueListenableBuilder<bool>(
+          valueListenable: bio.locked,
+          builder: (_, l, __) => l ? BioLockScreen(title: appTitle, color: brandColor, onUnlock: () => bio.unlock(appTitle)) : const SizedBox.shrink(),
+        ),
+      ]);
+
+  Widget _body(BuildContext context) {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
+        if (didPop || bio.locked.value) return;
         // the page goes back one screen (window.zrBack); on its main screen, press back twice to leave the app
         var handled = false;
         try {

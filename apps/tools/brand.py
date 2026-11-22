@@ -7,7 +7,7 @@ label = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else ('ZarDrive' if app
 app_id = sys.argv[3] if len(sys.argv) > 3 else ''
 man = proj / 'android/app/src/main/AndroidManifest.xml'
 s = man.read_text()
-perms = ''.join(f'    <uses-permission android:name="android.permission.{p}"/>\n' for p in ['INTERNET', 'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'] + (['RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS'] if app == 'driver' else []))
+perms = ''.join(f'    <uses-permission android:name="android.permission.{p}"/>\n' for p in ['INTERNET', 'ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'] + ['USE_BIOMETRIC'] + (['RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS'] if app == 'driver' else []))
 if 'ACCESS_FINE_LOCATION' not in s:
     s = re.sub(r'(<manifest[^>]*>\n)', r'\1' + perms, s, count=1)
 s = re.sub(r'android:label="[^"]*"', f'android:label="{label}"', s, count=1)
@@ -53,4 +53,11 @@ if app_id:
             t = re.sub(r'applicationId\s+"[^"]+"', f'applicationId "{app_id}"', t)
             g.write_text(t)
             break
+# fingerprint / face unlock (local_auth) needs a FragmentActivity
+for ma in (proj / 'android/app/src/main').rglob('MainActivity.*'):
+    m = ma.read_text()
+    m = m.replace('io.flutter.embedding.android.FlutterActivity', 'io.flutter.embedding.android.FlutterFragmentActivity')
+    m = m.replace(': FlutterActivity()', ': FlutterFragmentActivity()').replace('extends FlutterActivity', 'extends FlutterFragmentActivity')
+    ma.write_text(m)
+    print('main activity:', ma.name, 'FlutterFragmentActivity' in m)
 print('branded', app, '->', label, app_id)
