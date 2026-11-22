@@ -153,7 +153,12 @@ class _ShellState extends State<Shell> {
         backgroundColor: Colors.white,
         body: SafeArea(
           child: Stack(children: [
-            if (bridge != null) BaseMap(bridge: bridge!),
+            // Google's map is drawn only while the page uses it (the page turns it on in Settings); otherwise nothing runs underneath
+            if (bridge != null)
+              ValueListenableBuilder<bool>(
+                valueListenable: bridge!.layoutSeen,
+                builder: (_, seen, __) => seen ? BaseMap(bridge: bridge!) : const SizedBox.shrink(),
+              ),
             if (bridge != null)
               ValueListenableBuilder<bool>(
                 valueListenable: bridge!.layoutSeen,
