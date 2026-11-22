@@ -108,6 +108,8 @@ class _ShellState extends State<Shell> {
     if (gmapOn) {
       final b = bridge = GBridge(web, () => context);
       web.addJavaScriptChannel('ZRNative', onMessageReceived: (m) => b.onMessage(m.message));
+      // tells the page from the very start that the app draws Google's map underneath (version 2)
+      web.addJavaScriptChannel('ZRGMap2', onMessageReceived: (_) {});
     }
     _start();
     Permission.locationWhenInUse.request();
