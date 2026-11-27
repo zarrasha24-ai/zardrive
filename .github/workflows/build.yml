@@ -40,12 +40,12 @@ jobs:
         run: flutter create --platforms android --org com.zarrasha --project-name ${{ matrix.app == 'passenger' && 'zardrive' || 'zardrive_driver' }} .
       - name: Add the app name, icon, id and permissions
         env:
-          GOOGLE_MAPS_KEY: ${{ matrix.tag != 'test' && secrets.GOOGLE_MAPS_KEY || '' }}
+          GOOGLE_MAPS_KEY: ${{ matrix.tag == 'rides-beta' && secrets.GOOGLE_MAPS_KEY || '' }}
         run: python3 apps/tools/brand.py ${{ matrix.app }} "${{ matrix.label }}" "${{ matrix.appid }}"
       - name: Build APK
         working-directory: apps/${{ matrix.app }}
         env:
-          HAS_GMAP: ${{ matrix.tag != 'test' && secrets.GOOGLE_MAPS_KEY != '' && '1' || '0' }}
+          HAS_GMAP: ${{ matrix.tag == 'rides-beta' && secrets.GOOGLE_MAPS_KEY != '' && '1' || '0' }}   # pilot apps: no Google map layer (faster sliding, ZarRide's own map)
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos --no-fatal-warnings || true
