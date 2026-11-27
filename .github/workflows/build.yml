@@ -17,10 +17,14 @@ jobs:
         include:
           - { app: passenger, apk: ZarDrive, tag: test, label: ZarDrive, appid: '', defines: '' }
           - { app: driver, apk: ZarDrive-Driver, tag: test, label: ZarDrive Driver, appid: '', defines: '' }
-          - { app: passenger, apk: Zarrasha-Rides, tag: rides-beta, label: Zarrasha Rides, appid: com.zarrasha.rides,
-              defines: '--dart-define=START_URL=https://admin.zarrasha.com/beta/rides/ --dart-define=OUR_HOST=admin.zarrasha.com --dart-define="APP_TITLE=Zarrasha Rides" --dart-define=BRAND_COLOR=4291559963' }
-          - { app: driver, apk: Zarrasha-Rides-Rider, tag: rides-beta, label: Zarrasha Rides Rider, appid: com.zarrasha.rides.rider,
-              defines: '--dart-define=START_URL=https://admin.zarrasha.com/beta/rides-driver/ --dart-define=OUR_HOST=admin.zarrasha.com --dart-define="APP_TITLE=Zarrasha Rides Rider" --dart-define=BRAND_COLOR=4291559963' }
+          - { app: passenger, apk: Zarrasha-Rides, tag: rides-beta, label: ZarRide Beta, appid: com.zarrasha.rides,
+              defines: '--dart-define=START_URL=https://admin.zarrasha.com/beta/rides/ --dart-define=OUR_HOST=admin.zarrasha.com --dart-define="APP_TITLE=ZarRide Beta" --dart-define=BRAND_COLOR=4291559963' }
+          - { app: driver, apk: Zarrasha-Rides-Rider, tag: rides-beta, label: ZarRide Driver Beta, appid: com.zarrasha.rides.rider,
+              defines: '--dart-define=START_URL=https://admin.zarrasha.com/beta/rides-driver/ --dart-define=OUR_HOST=admin.zarrasha.com --dart-define="APP_TITLE=ZarRide Driver Beta" --dart-define=BRAND_COLOR=4291559963' }
+          - { app: passenger, apk: ZarRide-Pilot, tag: zarride-pilot, label: ZarRide Pilot, appid: com.zarrasha.zarride.pilot,
+              defines: '--dart-define=START_URL=https://admin.zarrasha.com/rides/ --dart-define=OUR_HOST=admin.zarrasha.com --dart-define=APP_TITLE=ZarRide --dart-define="PILOT_TAG=PILOT TEST RUN" --dart-define=BRAND_COLOR=4291559963' }
+          - { app: driver, apk: ZarRide-Driver-Pilot, tag: zarride-pilot, label: ZarRide Driver Pilot, appid: com.zarrasha.zarride.driver.pilot,
+              defines: '--dart-define=START_URL=https://admin.zarrasha.com/rides-driver/ --dart-define=OUR_HOST=admin.zarrasha.com --dart-define="APP_TITLE=ZarRide Driver" --dart-define="PILOT_TAG=PILOT TEST RUN" --dart-define=BRAND_COLOR=4291559963' }
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -36,12 +40,12 @@ jobs:
         run: flutter create --platforms android --org com.zarrasha --project-name ${{ matrix.app == 'passenger' && 'zardrive' || 'zardrive_driver' }} .
       - name: Add the app name, icon, id and permissions
         env:
-          GOOGLE_MAPS_KEY: ${{ matrix.tag == 'rides-beta' && secrets.GOOGLE_MAPS_KEY || '' }}
+          GOOGLE_MAPS_KEY: ${{ matrix.tag != 'test' && secrets.GOOGLE_MAPS_KEY || '' }}
         run: python3 apps/tools/brand.py ${{ matrix.app }} "${{ matrix.label }}" "${{ matrix.appid }}"
       - name: Build APK
         working-directory: apps/${{ matrix.app }}
         env:
-          HAS_GMAP: ${{ matrix.tag == 'rides-beta' && secrets.GOOGLE_MAPS_KEY != '' && '1' || '0' }}
+          HAS_GMAP: ${{ matrix.tag != 'test' && secrets.GOOGLE_MAPS_KEY != '' && '1' || '0' }}
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos --no-fatal-warnings || true
@@ -61,9 +65,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ matrix.tag }}
-          name: ${{ matrix.tag == 'test' && 'ZarDrive test apps' || 'Zarrasha Rides beta apps' }}
+          name: ${{ matrix.tag == 'zarride-pilot' && 'ZarRide Pilot Test Run apps' || (matrix.tag == 'test' && 'ZarDrive test apps' || 'ZarRide beta apps') }}
           prerelease: true
-          body: "${{ matrix.tag == 'test' && 'Latest test build of the ZarDrive passenger app (ZarDrive.apk) and driver app (ZarDrive-Driver.apk). Rebuilt on every push to main.' || 'Zarrasha Rides beta: customer app (Zarrasha-Rides.apk) opens admin.zarrasha.com/beta/rides, rider app (Zarrasha-Rides-Rider.apk) opens admin.zarrasha.com/beta/rides-driver. The plain .apk is for phones from about 2017 on (64-bit); -old-phones.apk is for older 32-bit phones. Rebuilt on every push to main.' }}"
+          body: "${{ matrix.tag == 'zarride-pilot' && 'ZarRide Pilot Test Run (live): ZarRide customer app (ZarRide-Pilot.apk) opens admin.zarrasha.com/rides, ZarRide Driver app (ZarRide-Driver-Pilot.apk) opens admin.zarrasha.com/rides-driver. Only pilot riders and customers can book or drive. The plain .apk is for 64-bit phones; -old-phones.apk for older 32-bit phones.' || matrix.tag == 'test' && 'Latest test build of the ZarDrive passenger app (ZarDrive.apk) and driver app (ZarDrive-Driver.apk). Rebuilt on every push to main.' || 'ZarRide beta: customer app (Zarrasha-Rides.apk) opens admin.zarrasha.com/beta/rides, rider app (Zarrasha-Rides-Rider.apk) opens admin.zarrasha.com/beta/rides-driver. The plain .apk is for phones from about 2017 on (64-bit); -old-phones.apk is for older 32-bit phones. Rebuilt on every push to main.' }}"
           files: |
             ${{ matrix.apk }}.apk
             ${{ matrix.apk }}-old-phones.apk

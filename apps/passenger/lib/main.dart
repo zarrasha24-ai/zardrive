@@ -16,6 +16,8 @@ const String ourHost = String.fromEnvironment('OUR_HOST', defaultValue: 'zardriv
 const String appTitle = String.fromEnvironment('APP_TITLE', defaultValue: 'ZarDrive');
 // GMAP=1 when the build has a Google Maps key: the web screens may then open Google's native map (free inside the app)
 const bool gmapOn = String.fromEnvironment('GMAP') == '1' || String.fromEnvironment('GMAP') == 'true';
+// Pilot builds show a small "Pilot Test Run" label in the corner (empty in other builds)
+const String pilotTag = String.fromEnvironment('PILOT_TAG');
 const int brandColor = int.fromEnvironment('BRAND_COLOR', defaultValue: 0xFFC8102E);
 
 void main() {
@@ -202,6 +204,18 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             else
               WebViewWidget(controller: web),
             if (loading) const Center(child: CircularProgressIndicator()),
+            if (pilotTag != '')
+              Positioned(
+                left: 0,
+                bottom: 0,
+                child: IgnorePointer(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: const BoxDecoration(color: Color(0xE6F79009), borderRadius: BorderRadius.only(topRight: Radius.circular(8))),
+                    child: const Text(pilotTag, style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                  ),
+                ),
+              ),
             if (offline)
               Container(
                 color: Colors.white,
